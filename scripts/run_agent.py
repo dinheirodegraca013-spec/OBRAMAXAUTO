@@ -52,10 +52,23 @@ def verify_target(raw: str) -> Path:
     return target
 
 
+def validate_scope(target: Path) -> None:
+    """Impede que o agente execute usando o template de escopo ainda não preenchido."""
+    contents = (target / "ESCOPO.md").read_text(encoding="utf-8").strip()
+    placeholders = ("[descrever]", "[teste reproduzível]", "Descreva o propósito")
+    if len(contents) < 200 or any(item in contents for item in placeholders):
+        raise ValueError(
+            "ESCOPO.md ainda é um modelo ou está incompleto. "
+            "Preencha requisitos, ambientes e critérios de aceite antes de iniciar."
+        )
+
+
 def ensure_branch(target: Path, state: dict) -> str:
     current = git(target, "branch", "--show-current")
     previous = state.get("branch")
     if previous:
+        if not previous.startswith("obramax/"):
+            raise ValueError("Estado antigo aponta para branch não autorizada (" + previous + "); corrija o estado manualmente.")
         if current != previous:
             raise ValueError("Branch mudou desde a execução anterior; volte para " + previous + " ou arquive .obramaxauto/runner-state.json após revisão.")
         return current
@@ -100,8 +113,17 @@ def acceptance_gate(target: Path) -> tuple[bool, str]:
         return False, "Critérios em ACEITE.md ausentes ou ainda pendentes."
     test_text = tests.read_text(encoding="utf-8")
     audit_text = audit.read_text(encoding="utf-8")
-    if not re.search(r"\b(PASS|APROVADO)\b", test_text, re.I):
-        return False, "TESTES.md sem evidência de resultados aprovados."
+    # Uma menção isolada a PASS não é evidência; exigir linha de teste concluído.
+    def documented_pass(line: str) -> bool:
+        if line.lstrip().startswith("|"):
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            return (len(cells) >= 5 and cells[3].upper() in {"PASS", "APROVADO"}
+                    and cells[1] not in {"", "-"} and cells[2] not in {"", "-"})
+        return bool(re.fullmatch(r"\s*(?:Caso|Teste|Test)\s+[^:]+:\s*(?:PASS|APROVADO)\s*", line, re.I))
+
+    if (not any(documented_pass(line) for line in test_text.splitlines())
+            or re.search(r"\bNÃO\s+(?:EXECUTADO|APROVADO)\b", test_text, re.I)):
+        return False, "TESTES.md sem evidência explícita de teste aprovado."
     if not re.search(r"^Parecer final:\s*PASS\s*$", audit_text, re.I | re.M):
         return False, "Falta parecer PASS em AUDITORIA.md."
     return True, "Gates documentais presentes; revisão humana independente ainda necessária."
@@ -181,6 +203,13 @@ def loop(args: argparse.Namespace) -> int:
     codex = shutil.which("codex")
     if not codex and not args.dry_run:
         raise RuntimeError("CLI codex não encontrada no PATH.")
+    # Dry-run realmente somente leitura: não cria branch, estado, lock ou excludes.
+    if args.dry_run:
+        branch = git(target, "branch", "--show-current")
+        print("DRY RUN (nenhuma alteração):", "repo=", target,
+              "branch=", branch, "codex=", codex or "não instalado")
+        return 0
+    validate_scope(target)
     state_dir = target / ".obramaxauto"
     state_dir.mkdir(exist_ok=True)
     # Dados locais (inclusive logs de ferramentas) não devem entrar no Git.
@@ -200,9 +229,6 @@ def loop(args: argparse.Namespace) -> int:
         state["target"] = str(target)
         state["last_run_start"] = datetime.now(timezone.utc).isoformat()
         save_state(statefile, state)
-        if args.dry_run:
-            print("DRY RUN:", "repo=", target, "branch=", branch, "codex=", codex or "não instalado")
-            return 0
         print("OBRAMAXAUTO", "| branch:", branch, "| máximo de ciclos:", args.max_cycles)
         start = time.monotonic()
         end_reason = "LIMIT_REACHED"
