@@ -227,7 +227,8 @@ def build_prompt(target: Path, cycle: int, task: dict | None = None) -> str:
         "Nunca fabrique testes ou resultados."
         + ("\nTAREFA AUTORIZADA DA FILA: [" + task["id"] + "] " + task["title"]
            + ". Trabalhe especificamente nela; não mude o estado da fila diretamente. "
-           + "Se faltar condição de autorização, declare BLOCKED." if task else "")    )
+           + "Se faltar condição de autorização, declare BLOCKED." if task else "")
+    )
 
 
 def run_cycle(codex: str, target: Path, logdir: Path, cycle: int, timeout: int, task: dict | None = None) -> tuple[int, str, str]:
@@ -350,6 +351,11 @@ def loop(args: argparse.Namespace) -> int:
                 verified = verify_task(target, args.verify_command) if status == "READY" and code == 0 and progressed else False
                 complete(task, status, code, Path(log).name, progressed, verified=verified)
                 save_queue(queue_path, q)
+                # A indicação READY do modelo não equivale a conclusão verificável.
+                # Impedir que o estado global termine se a tarefa ficou pendente.
+                if status == "READY" and task["status"] != "review":
+                    print("READY rejeitado: tarefa sem progresso e/ou testes válidos.")
+                    status = "CONTINUE"
             if code:
                 state["consecutive_errors"] = int(state.get("consecutive_errors", 0)) + 1
             else:
@@ -373,7 +379,7 @@ def loop(args: argparse.Namespace) -> int:
             if args.queue and task["status"] == "review":
                 end_reason = "TASK_REVIEW"
                 break
-            if status == "READY" and code == 0:
+            if status == "READY" and code == 0 and not args.queue:
                 end_reason = "READY_FOR_HUMAN_REVIEW"
                 break
             if status == "BLOCKED" and code == 0:
@@ -393,7 +399,7 @@ def loop(args: argparse.Namespace) -> int:
         print("Encerramento:", end_reason)
         print("Branch local:", branch)
         print("Revise alterações e testes antes de abrir PR ou publicar.")
-        return 0 if end_reason == "READY_FOR_HUMAN_REVIEW" else 1
+        return 0 if end_reason in {"READY_FOR_HUMAN_REVIEW", "TASK_REVIEW"} else 1
     finally:
         lock_handle.close()
 

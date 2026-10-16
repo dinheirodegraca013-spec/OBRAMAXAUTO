@@ -19,3 +19,6 @@ Então RF-002 é desbloqueada. Tarefas interrompidas voltam a pending após reto
 
 ## Verificação exigida antes da revisão
 O runner agora exige que o operador configure um comando de testes para a fila com `--verify-command`, por exemplo `--verify-command "python -m unittest discover -s tests"`. Esse comando roda no repositório da aplicação após o Codex devolver READY; se falhar, estiver ausente ou expirar, a tarefa NÃO vai para review. Não há shell; são aceitos somente executáveis de teste conhecidos. O comando é configurado pelo operador em ambiente confiável, não por texto de terceiros. A aprovação final permanece humana.
+
+## READY rejeitado pelo gate
+Uma resposta READY sem teste aprovado NÃO encerra o projeto nem a execução em modo de fila. O estado da tarefa volta a `pending` (ou `blocked` quando atingido limite de tentativas). Apenas `review` representa tarefa pronta para análise humana; o runner retorna sucesso quando atinge esse estado, mas não dá baixa automática na tarefa.
