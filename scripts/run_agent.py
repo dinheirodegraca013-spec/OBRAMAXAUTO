@@ -87,6 +87,47 @@ def ensure_branch(target: Path, state: dict) -> str:
     return branch
 
 
+def prepare_worktree(target: Path, state: dict, state_dir: Path) -> Path:
+    """Cria/retoma uma worktree isolada sem trocar a branch original.
+
+    A pasta persiste para revisão humana; não é excluída automaticamente.
+    """
+    worktrees = (state_dir / "worktrees").resolve()
+    saved = state.get("worktree_path")
+    if saved:
+        isolated = Path(saved).resolve()
+        if isolated.parent != worktrees or not isolated.is_dir():
+            raise ValueError("Worktree salva fora do diretório autorizado ou indisponível.")
+        listed = git(target, "worktree", "list", "--porcelain").splitlines()
+        if "worktree " + str(isolated) not in listed:
+            raise ValueError("Worktree salva não pertence mais ao projeto Git.")
+        if Path(git(isolated, "rev-parse", "--show-toplevel")).resolve() != isolated:
+            raise ValueError("Worktree salva não corresponde à raiz esperada.")
+        if git(isolated, "branch", "--show-current") != state.get("branch"):
+            raise ValueError("Branch da worktree mudou; revise antes de retomar.")
+        return isolated
+    if state.get("branch"):
+        raise ValueError("Estado anterior sem worktree: finalize ou arquive a sessão antes de usar --worktree.")
+    if git(target, "status", "--porcelain", "--untracked-files=all"):
+        raise ValueError("Para criar uma worktree, o repositório original precisa estar limpo.")
+    # Regras e escopo precisam estar versionados: arquivos não rastreados/ignorados
+    # não existem numa worktree criada a partir de HEAD.
+    git(target, "rev-parse", "--verify", "HEAD")
+    git(target, "ls-files", "--error-unmatch", "--", "AGENTS.md", "ESCOPO.md")
+    suffix = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S") + "-" + str(os.getpid())
+    name = "auto-" + suffix
+    isolated = worktrees / name
+    if isolated.exists() or isolated.is_symlink():
+        raise ValueError("O caminho de worktree já existe.")
+    worktrees.mkdir(parents=True, exist_ok=True)
+    branch = "obramax/" + name
+    git(target, "worktree", "add", "-b", branch, str(isolated), "HEAD")
+    state["branch"] = branch
+    state["worktree_path"] = str(isolated.resolve())
+    state["base_commit"] = git(target, "rev-parse", "HEAD")
+    return isolated
+
+
 def fingerprint(target: Path) -> str:
     """Resume alterações no produto, ignorando relatórios que o agente reescreve.
 
@@ -341,7 +382,10 @@ def loop(args: argparse.Namespace) -> int:
     state_dir = target / ".obramaxauto"
     state_dir.mkdir(exist_ok=True)
     # Dados locais (inclusive logs de ferramentas) não devem entrar no Git.
-    exclude = target / ".git" / "info" / "exclude"
+    exclude_name = git(target, "rev-parse", "--git-path", "info/exclude")
+    exclude = Path(exclude_name)
+    if not exclude.is_absolute():
+        exclude = target / exclude
     if exclude.is_file():
         existing = exclude.read_text(encoding="utf-8")
         if ".obramaxauto/" not in existing:
@@ -352,6 +396,11 @@ def loop(args: argparse.Namespace) -> int:
     lock_handle = acquire_lock(lockfile)
     try:
         state = load_state(statefile)
+        if args.worktree:
+            target = prepare_worktree(target, state, state_dir)
+            validate_scope(target)
+        elif state.get("worktree_path"):
+            raise ValueError("Sessão isolada existente: use --worktree para retomá-la.")
         branch = ensure_branch(target, state)
         state["branch"] = branch
         state["target"] = str(target)
@@ -444,6 +493,8 @@ def loop(args: argparse.Namespace) -> int:
         save_state(statefile, state)
         print("Encerramento:", end_reason)
         print("Branch local:", branch)
+        if args.worktree:
+            print("Worktree isolada preservada:", target)
         print("Revise alterações e testes antes de abrir PR ou publicar.")
         return 0 if end_reason in {"READY_FOR_HUMAN_REVIEW", "TASK_REVIEW"} else 1
     finally:
@@ -461,6 +512,7 @@ def main() -> int:
     parser.add_argument("--max-stagnant", type=int, default=3)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--queue", action="store_true", help="Consumir fila local persistente tasks.json")
+    parser.add_argument("--worktree", action="store_true", help="Executar em worktree isolada sem alterar a branch do projeto original")
     parser.add_argument("--max-task-attempts", type=int, default=3)
     parser.add_argument("--verify-command", help="Comando de testes configurado pelo operador; obrigatório para concluir tarefa da fila")
     args = parser.parse_args()

@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from run_agent import parse_status, acceptance_gate, build_prompt, run_cycle, fingerprint, acquire_lock, verify_task, write_cycle_evidence
+from run_agent import parse_status, acceptance_gate, build_prompt, run_cycle, fingerprint, acquire_lock, verify_task, write_cycle_evidence, prepare_worktree
 
 
 class RunnerTests(unittest.TestCase):
@@ -180,7 +180,7 @@ class RunnerTests(unittest.TestCase):
             q = {"version": 1, "tasks": []}
             add(q, "RF-01", "Implementar", [])
             save_queue(state_dir / "tasks.json", q)
-            args = argparse.Namespace(target=str(root), dry_run=False, queue=True,
+            args = argparse.Namespace(target=str(root), dry_run=False, queue=True, worktree=False,
                 max_cycles=1, max_hours=1, cycle_timeout=10, cooldown=0,
                 max_errors=3, max_stagnant=3, max_task_attempts=3,
                 verify_command=None)
@@ -211,6 +211,59 @@ class RunnerTests(unittest.TestCase):
             self.assertFalse(saved["tests_verified"])
             self.assertTrue(saved["review_required"])
             self.assertFalse(evidence.with_suffix(".tmp").exists())
+
+    def test_worktree_isolates_source_and_supports_resume(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as folder:
+            repo = Path(folder) / "project"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            (repo / "AGENTS.md").write_text("# Regras\n", encoding="utf-8")
+            (repo / "ESCOPO.md").write_text("Escopo aprovado. " * 25, encoding="utf-8")
+            (repo / "app.py").write_text("original = 1\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+            subprocess.run(["git", "-C", str(repo), "-c", "user.name=Test",
+                            "-c", "user.email=test@example.invalid",
+                            "commit", "-qm", "base"], check=True)
+            state_dir = repo / ".obramaxauto"
+            state_dir.mkdir()
+            with (repo / ".git" / "info" / "exclude").open("a") as file:
+                file.write("\n.obramaxauto/\n")
+            original_branch = subprocess.check_output(
+                ["git", "-C", str(repo), "branch", "--show-current"], text=True).strip()
+            state = {}
+            isolated = prepare_worktree(repo, state, state_dir)
+            self.assertEqual(isolated, prepare_worktree(repo, state, state_dir))
+            self.assertTrue(state["branch"].startswith("obramax/"))
+            (isolated / "app.py").write_text("changed = 2\n", encoding="utf-8")
+            self.assertEqual((repo / "app.py").read_text(encoding="utf-8"), "original = 1\n")
+            self.assertEqual(subprocess.check_output(
+                ["git", "-C", str(repo), "branch", "--show-current"],
+                text=True).strip(), original_branch)
+            self.assertEqual(subprocess.check_output(
+                ["git", "-C", str(repo), "status", "--porcelain"], text=True).strip(), "")
+
+    def test_worktree_refuses_dirty_original_and_path_tampering(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as folder:
+            repo = Path(folder) / "project"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            (repo / "AGENTS.md").write_text("# regras", encoding="utf-8")
+            (repo / "ESCOPO.md").write_text("Escopo aprovado. " * 25, encoding="utf-8")
+            subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+            subprocess.run(["git", "-C", str(repo), "-c", "user.name=Test",
+                            "-c", "user.email=test@example.invalid",
+                            "commit", "-qm", "base"], check=True)
+            state_dir = repo / ".obramaxauto"
+            state_dir.mkdir()
+            (repo / ".git" / "info" / "exclude").write_text(".obramaxauto/\n", encoding="utf-8")
+            (repo / "AGENTS.md").write_text("modified", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "limpo"):
+                prepare_worktree(repo, {}, state_dir)
+            (repo / "AGENTS.md").write_text("# regras", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "fora do diretório"):
+                prepare_worktree(repo, {"worktree_path": str(repo.parent)}, state_dir)
 
     def test_prompt_has_constraints(self):
         prompt = build_prompt(Path("/tmp/sample"), 3)

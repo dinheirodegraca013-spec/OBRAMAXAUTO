@@ -48,3 +48,7 @@ Para medir orquestração, detectar ferramentas de navegador e analisar skills e
 ## Pesquisa em GitLab, Codeberg/Forgejo e SourceHut
 
 O procedimento de pesquisa de agentes foi ampliado para repositórios além do GitHub, com checagem de licenças, runners e limites de integração. Consulte [PESQUISA_MULTI_FORGE.md](docs/PESQUISA_MULTI_FORGE.md). Isto não instala conectores de outras plataformas.
+
+## Worktree isolada (opt-in)
+
+Use `python scripts/run_agent.py --target /caminho/do/projeto --worktree --max-cycles 1 --max-hours 1` para executar o Codex em uma worktree separada, sem trocar a branch aberta no projeto original. Exige repositório limpo com `AGENTS.md` e `ESCOPO.md` versionados e reaproveita a mesma worktree na retomada. Consulte [arquitetura](docs/ARQUITETURA.md); isolamento por tarefa e execução paralela ainda não são suportados.
