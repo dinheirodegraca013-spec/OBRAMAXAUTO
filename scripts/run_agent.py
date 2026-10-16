@@ -177,6 +177,32 @@ def save_state(path: Path, data: dict) -> None:
     temp.replace(path)
 
 
+def write_cycle_evidence(directory: Path, record: dict, task: dict | None = None) -> Path:
+    """Registra evidência local por ciclo sem armazenar o conteúdo dos logs.
+
+    Não confundir saída do modelo com teste real ou aprovação humana.
+    """
+    evidence_dir = directory / "evidence"
+    evidence_dir.mkdir(exist_ok=True)
+    path = evidence_dir / f"cycle-{record['cycle']:05d}.json"
+    obj = {
+        "schema_version": 1,
+        "cycle": record["cycle"],
+        "timestamp": record["date"],
+        "task_id": task["id"] if task else None,
+        "status": record["status"],
+        "returncode": record["returncode"],
+        "progressed": record["progressed"],
+        "log_file": record["log"],
+        "tests_verified": bool(task.get("verification_passed")) if task else False,
+        "review_required": True,
+    }
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)
+    return path
+
+
 def acquire_lock(path: Path):
     """Trava pelo sistema operacional; o lock libera mesmo após queda do processo.
 
@@ -394,6 +420,7 @@ def loop(args: argparse.Namespace) -> int:
             state["last_status"] = status
             state["history"] = (state.get("history", []) + [record])[-100:]
             save_state(statefile, state)
+            write_cycle_evidence(state_dir, record, task)
             print(f"Ciclo {cycle}: status={status}, rc={code}, mudou={progressed}, log={log}")
             if args.queue and task["status"] == "review":
                 end_reason = "TASK_REVIEW"
