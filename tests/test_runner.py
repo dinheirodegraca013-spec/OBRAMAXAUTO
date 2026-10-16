@@ -134,6 +134,39 @@ class RunnerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 verify_task(Path(folder), "python -c print(1)")
 
+    def test_queue_ready_without_verified_tests_does_not_end_project(self):
+        # O runner deve impedir que READY encerre a fila quando o gate falhar.
+        from unittest.mock import patch
+        import argparse
+        import subprocess
+        import run_agent
+        from task_queue import add, save as save_queue, load as load_queue
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            (root / "AGENTS.md").write_text("# Regras", encoding="utf-8")
+            (root / "ESCOPO.md").write_text("Requisito aceito. " * 25, encoding="utf-8")
+            state_dir = root / ".obramaxauto"
+            state_dir.mkdir()
+            q = {"version": 1, "tasks": []}
+            add(q, "RF-01", "Implementar", [])
+            save_queue(state_dir / "tasks.json", q)
+            args = argparse.Namespace(target=str(root), dry_run=False, queue=True,
+                max_cycles=1, max_hours=1, cycle_timeout=10, cooldown=0,
+                max_errors=3, max_stagnant=3, max_task_attempts=3,
+                verify_command=None)
+            def fake_cycle(codex, target, logdir, cycle, timeout, task):
+                (target / "app.py").write_text("print('ok')", encoding="utf-8")
+                return 0, "READY", str(logdir / "cycle-00001.log")
+            with patch.object(run_agent.shutil, "which", return_value="/usr/bin/fake-codex"):
+                with patch.object(run_agent, "run_cycle", side_effect=fake_cycle):
+                    self.assertEqual(run_agent.loop(args), 1)
+            saved = load_queue(state_dir / "tasks.json")
+            self.assertEqual(saved["tasks"][0]["status"], "pending")
+            self.assertNotEqual(
+                run_agent.load_state(state_dir / "runner-state.json")["last_exit_reason"],
+                "READY_FOR_HUMAN_REVIEW")
+
     def test_prompt_has_constraints(self):
         prompt = build_prompt(Path("/tmp/sample"), 3)
         self.assertIn("STATUS: BLOCKED", prompt)
