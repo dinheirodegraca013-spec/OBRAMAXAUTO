@@ -24,6 +24,10 @@ def load(path: Path) -> dict:
             raise ValueError("Dependências inválidas")
         if not isinstance(t.get("attempts",0),int) or isinstance(t.get("attempts",0),bool) or t.get("attempts",0)<0:
             raise ValueError("Tentativas inválidas")
+        baseline=t.get("baseline_fingerprint")
+        if baseline is not None and (not isinstance(baseline,str) or len(baseline)!=64
+                                     or any(ch not in "0123456789abcdef" for ch in baseline)):
+            raise ValueError("Baseline de tarefa inválida")
     dependencies = {}
     for t in obj["tasks"]:
         deps = t.get("deps", [])
@@ -86,6 +90,7 @@ def complete(task:dict,status:str,exit_code:int,log:str,progress:bool,verified:b
     task["last_log"]=log
     task["last_status"]=status
     task["verification_passed"]=verified
+    task["net_progress"]=bool(progress)
     task["updated_at"]=utcnow()
     task["note"]="Revisão humana obrigatória antes de marcar done" if task["status"]=="review" else "Aguardando nova tentativa ou diagnóstico"
 
@@ -134,6 +139,8 @@ def main():
             task["updated_at"]=utcnow()
             task["note"]="Operador revisou interrupção e autorizou nova tentativa"
             task["verification_passed"]=False
+            task.pop("baseline_fingerprint",None)
+            task.pop("net_progress",None)
             if args.reset_attempts:
                 task["attempts"]=0
         save(path,obj)
