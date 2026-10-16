@@ -409,6 +409,84 @@ class RunnerTests(unittest.TestCase):
             self.assertNotIn("inflight",state)
             self.assertTrue((repo/".obramaxauto"/"evidence"/"cycle-00001.json").is_file())
 
+    def test_multicycle_ready_uses_task_baseline(self):
+        import argparse
+        import subprocess
+        from unittest.mock import patch
+        import run_agent
+        from task_queue import add, save as save_queue, load as load_queue
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            subprocess.run(["git","init","-q",str(root)],check=True)
+            (root/"AGENTS.md").write_text("# Regras",encoding="utf-8")
+            (root/"ESCOPO.md").write_text("Escopo aprovado. "*30,encoding="utf-8")
+            state_dir=root/".obramaxauto"
+            state_dir.mkdir()
+            queue={"version":1,"tasks":[]}
+            add(queue,"A","Desenvolvimento em dois ciclos",[])
+            save_queue(state_dir/"tasks.json",queue)
+            args=argparse.Namespace(target=str(root),dry_run=False,queue=True,
+                worktree=False,max_cycles=2,max_hours=1,cycle_timeout=10,
+                cooldown=0,max_errors=3,max_stagnant=3,max_task_attempts=3,
+                verify_command="python -m unittest discover -s tests",
+                ack_interrupted=False)
+            runs=[]
+            def fake_cycle(codex,target,logdir,cycle,timeout,task):
+                runs.append(cycle)
+                if cycle == 1:
+                    (target/"feature.py").write_text("ready = True",encoding="utf-8")
+                    return 0,"CONTINUE",str(logdir/"test.log")
+                return 0,"READY",str(logdir/"test.log")
+            with patch.object(run_agent.shutil,"which",return_value="codex"):
+                with patch.object(run_agent,"run_cycle",side_effect=fake_cycle):
+                    with patch.object(run_agent,"verify_task",return_value=True) as gate:
+                        self.assertEqual(run_agent.loop(args),0)
+                        gate.assert_called_once()
+            self.assertEqual(runs,[1,2])
+            task=load_queue(state_dir/"tasks.json")["tasks"][0]
+            self.assertEqual(task["status"],"review")
+            self.assertTrue(task["net_progress"])
+            import json
+            evidence=json.loads((state_dir/"evidence"/"cycle-00002.json").read_text())
+            self.assertFalse(evidence["progressed"] if "progressed" in evidence else False)
+            self.assertTrue(evidence["task_net_progress"])
+
+    def test_multicycle_ready_rejects_reverted_changes(self):
+        import argparse
+        import subprocess
+        from unittest.mock import patch
+        import run_agent
+        from task_queue import add, save as save_queue, load as load_queue
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            subprocess.run(["git","init","-q",str(root)],check=True)
+            (root/"AGENTS.md").write_text("# Regras",encoding="utf-8")
+            (root/"ESCOPO.md").write_text("Escopo aprovado. "*30,encoding="utf-8")
+            state_dir=root/".obramaxauto"
+            state_dir.mkdir()
+            queue={"version":1,"tasks":[]}
+            add(queue,"A","Mudança revertida",[])
+            save_queue(state_dir/"tasks.json",queue)
+            args=argparse.Namespace(target=str(root),dry_run=False,queue=True,
+                worktree=False,max_cycles=2,max_hours=1,cycle_timeout=10,
+                cooldown=0,max_errors=3,max_stagnant=3,max_task_attempts=3,
+                verify_command="python -m unittest discover -s tests",
+                ack_interrupted=False)
+            def fake_cycle(codex,target,logdir,cycle,timeout,task):
+                if cycle == 1:
+                    (target/"feature.py").write_text("ready = True",encoding="utf-8")
+                    return 0,"CONTINUE",str(logdir/"test.log")
+                (target/"feature.py").unlink()
+                return 0,"READY",str(logdir/"test.log")
+            with patch.object(run_agent.shutil,"which",return_value="codex"):
+                with patch.object(run_agent,"run_cycle",side_effect=fake_cycle):
+                    with patch.object(run_agent,"verify_task") as gate:
+                        self.assertEqual(run_agent.loop(args),1)
+                        gate.assert_not_called()
+            task=load_queue(state_dir/"tasks.json")["tasks"][0]
+            self.assertEqual(task["status"],"pending")
+            self.assertFalse(task["net_progress"])
+
     def test_prompt_has_constraints(self):
         prompt = build_prompt(Path("/tmp/sample"), 3)
         self.assertIn("STATUS: BLOCKED", prompt)

@@ -98,6 +98,8 @@ class TaskQueueTests(unittest.TestCase):
             add(q,"A","Tarefa",[])
             q["tasks"][0]["status"]="blocked"
             q["tasks"][0]["attempts"]=3
+            q["tasks"][0]["baseline_fingerprint"]="a"*64
+            q["tasks"][0]["net_progress"]=True
             save(path,q)
             cli=Path(__file__).resolve().parents[1]/"scripts"/"task_queue.py"
             command=[sys.executable,str(cli),"--queue",str(path),"retry","A"]
@@ -109,6 +111,8 @@ class TaskQueueTests(unittest.TestCase):
             self.assertEqual(yes.returncode,0,yes.stderr)
             task=load(path)["tasks"][0]
             self.assertEqual((task["status"],task["attempts"]),("pending",0))
+            self.assertNotIn("baseline_fingerprint",task)
+            self.assertNotIn("net_progress",task)
 
     def test_save_load_and_bad_deps(self):
         with tempfile.TemporaryDirectory() as d:

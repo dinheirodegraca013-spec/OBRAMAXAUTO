@@ -236,6 +236,7 @@ def write_cycle_evidence(directory: Path, record: dict, task: dict | None = None
         "progressed": record["progressed"],
         "log_file": record["log"],
         "tests_verified": bool(task.get("verification_passed")) if task else False,
+        "task_net_progress": bool(task.get("net_progress")) if task else None,
         "review_required": True,
     }
     tmp = path.with_suffix(".tmp")
@@ -459,6 +460,9 @@ def loop(args: argparse.Namespace) -> int:
                     break
             cycle = int(state.get("total_cycles", 0)) + 1
             before = fingerprint(target)
+            if args.queue and not task.get("baseline_fingerprint"):
+                task["baseline_fingerprint"] = before
+                save_queue(queue_path, q)
             # Persistir o marco ANTES de iniciar o Codex: uma queda não pode
             # converter trabalho com efeitos colaterais em nova tentativa cega.
             state["inflight"] = {
@@ -476,9 +480,13 @@ def loop(args: argparse.Namespace) -> int:
             )
             after = fingerprint(target)
             progressed = before != after
+            # Uma tarefa pode implementar no ciclo N e apenas validar no ciclo N+1.
+            # Exigir diferença real contra o primeiro estado da tarefa, não
+            # apenas diferença durante o último ciclo (que pode ser zero).
+            task_net_progress = after != task["baseline_fingerprint"] if args.queue else progressed
             if args.queue:
-                verified = verify_task(target, args.verify_command) if status == "READY" and code == 0 and progressed else False
-                complete(task, status, code, Path(log).name, progressed, verified=verified)
+                verified = verify_task(target, args.verify_command) if status == "READY" and code == 0 and task_net_progress else False
+                complete(task, status, code, Path(log).name, task_net_progress, verified=verified)
                 save_queue(queue_path, q)
                 # A indicação READY do modelo não equivale a conclusão verificável.
                 # Impedir que o estado global termine se a tarefa ficou pendente.
