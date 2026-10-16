@@ -180,7 +180,7 @@ class RunnerTests(unittest.TestCase):
             q = {"version": 1, "tasks": []}
             add(q, "RF-01", "Implementar", [])
             save_queue(state_dir / "tasks.json", q)
-            args = argparse.Namespace(target=str(root), dry_run=False, queue=True,
+            args = argparse.Namespace(target=str(root), dry_run=False, queue=True, worktree=False,
                 max_cycles=1, max_hours=1, cycle_timeout=10, cooldown=0,
                 max_errors=3, max_stagnant=3, max_task_attempts=3,
                 verify_command=None)
