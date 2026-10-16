@@ -24,7 +24,7 @@ Manter terminal ou processo supervisionado rodando em VPS/computador ligado. Aju
 - Tempo ou ciclos máximos atingidos -> parado; é possível retomar na mesma branch.
 
 ## Recuperação
-O runner salva runner-state.json e trabalha na mesma branch obramax/auto-*. Se o processo cair, execute o comando novamente. Se houver lock stale, confirme antes que nenhum processo continua ativo. Nunca apague dados da aplicação para 'resolver' bloqueios.
+O runner salva runner-state.json e trabalha na mesma branch obramax/auto-*. Se o processo cair, execute o comando novamente. O lock agora é gerenciado pelo sistema operacional e liberado automaticamente ao encerrar ou cair o processo. O arquivo `runner.lock` pode continuar existindo; isso é normal e não exige exclusão manual. Nunca apague dados da aplicação para 'resolver' bloqueios.
 
 ## Segurança
 Ao usar políticas sem aprovação interativa, mantenha --sandbox workspace-write. Não conceda acesso de produção à identidade executora. Use GitHub PR e aprovação humana como etapa final.
@@ -34,3 +34,6 @@ O runner só aceita `STATUS: READY`, `STATUS: CONTINUE` ou `STATUS: BLOCKED` com
 
 ## Progresso útil x documentação
 O watchdog não considera mudanças apenas em `ESTADO.md`, `BACKLOG.md`, `TESTES.md`, `AUDITORIA.md` ou `ACEITE.md` como avanço de implementação. Essas atualizações continuam registradas no Git, mas não reiniciam o limite de estagnação. Alterações em código, configurações, novos arquivos de produto e documentação técnica fora desses cinco arquivos contam como progresso. Após vários ciclos de relatórios sem resultados verificáveis, o executor encerra com `NO_PROGRESS` para evitar consumo improdutivo de tokens.
+
+## Evitar runners simultâneos e recuperar quedas
+A trava de processo utiliza bloqueios do sistema operacional (flock no Linux/macOS, locking no Windows), não a simples existência de um arquivo. Dois runners para o mesmo projeto não podem avançar ao mesmo tempo. Após queda do processo, o sistema operacional libera a trava automaticamente; na próxima execução, o runner pode retomar pela mesma branch e estado. Não apague `.obramaxauto/runner.lock` para tentar destravar: com bloqueio ativo, isso comprometeria a exclusividade.
