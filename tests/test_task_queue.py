@@ -40,6 +40,28 @@ class TaskQueueTests(unittest.TestCase):
         self.assertEqual(task["status"],"pending")
         self.assertFalse(task["verification_passed"])
 
+    def test_load_rejects_indirect_cycle(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "queue.json"
+            q = {"version": 1, "tasks": [
+                {"id": "A", "title": "A", "status": "pending", "deps": ["B"]},
+                {"id": "B", "title": "B", "status": "pending", "deps": ["C"]},
+                {"id": "C", "title": "C", "status": "pending", "deps": ["A"]},
+            ]}
+            save(path, q)
+            with self.assertRaisesRegex(ValueError, "circulares"):
+                load(path)
+
+    def test_load_accepts_valid_dependency_dag(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "queue.json"
+            q = {"version": 1, "tasks": []}
+            add(q, "A", "A", [])
+            add(q, "B", "B", ["A"])
+            add(q, "C", "C", ["A", "B"])
+            save(path, q)
+            self.assertEqual(len(load(path)["tasks"]), 3)
+
     def test_save_load_and_bad_deps(self):
         with tempfile.TemporaryDirectory() as d:
             path=Path(d)/"state"/"queue.json"

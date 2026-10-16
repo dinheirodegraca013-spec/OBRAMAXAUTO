@@ -24,9 +24,26 @@ def load(path: Path) -> dict:
             raise ValueError("Dependências inválidas")
         if not isinstance(t.get("attempts",0),int) or isinstance(t.get("attempts",0),bool) or t.get("attempts",0)<0:
             raise ValueError("Tentativas inválidas")
+    dependencies = {}
     for t in obj["tasks"]:
-        if t.get("id") in t.get("deps",[]) or any(dep not in ids for dep in t.get("deps",[])):
+        deps = t.get("deps", [])
+        if t["id"] in deps or any(dep not in ids for dep in deps):
             raise ValueError("Dependência inexistente ou circular direta")
+        if len(set(deps)) != len(deps):
+            raise ValueError("Dependência duplicada")
+        dependencies[t["id"]] = deps
+
+    # Verificação iterativa para não estourar a pilha com filas grandes.
+    # Todo grafo válido precisa permitir a resolução topológica completa.
+    resolved = set()
+    remaining = set(dependencies)
+    while remaining:
+        ready = {task_id for task_id in remaining
+                 if all(dep in resolved for dep in dependencies[task_id])}
+        if not ready:
+            raise ValueError("Dependências circulares detectadas na fila")
+        resolved.update(ready)
+        remaining.difference_update(ready)
     return obj
 
 def save(path:Path,obj:dict):
