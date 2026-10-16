@@ -22,7 +22,7 @@ class TaskQueueTests(unittest.TestCase):
     def test_resume_and_attempt_limit(self):
         q={"version":1,"tasks":[]};add(q,"A","Tarefa",[])
         t=q["tasks"][0];self.assertTrue(claim(t,1))
-        recover(q);self.assertEqual(t["status"],"pending")
+        recover(q);self.assertEqual(t["status"],"blocked")
         self.assertFalse(claim(t,1));self.assertEqual(t["status"],"blocked")
 
     def test_no_false_review_after_failure(self):
@@ -78,6 +78,37 @@ class TaskQueueTests(unittest.TestCase):
                 "add","A","Primeira tarefa"],capture_output=True,text=True)
             self.assertEqual(proc.returncode,0,proc.stderr)
             self.assertEqual(load(path)["tasks"][0]["id"],"A")
+
+    def test_recovery_blocks_running_and_does_not_approve(self):
+        q={"version":1,"tasks":[]}
+        add(q,"A","Efeito externo",[])
+        t=q["tasks"][0]
+        claim(t,3)
+        recover(q)
+        self.assertEqual(t["status"],"blocked")
+        self.assertFalse(t["verification_passed"])
+        self.assertIn("revisar",t["note"])
+        self.assertIsNone(next_task(q))
+
+    def test_cli_retry_requires_explicit_acknowledgement(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/".obramaxauto"/"tasks.json"
+            q={"version":1,"tasks":[]}
+            add(q,"A","Tarefa",[])
+            q["tasks"][0]["status"]="blocked"
+            q["tasks"][0]["attempts"]=3
+            save(path,q)
+            cli=Path(__file__).resolve().parents[1]/"scripts"/"task_queue.py"
+            command=[sys.executable,str(cli),"--queue",str(path),"retry","A"]
+            no_ack=subprocess.run(command,capture_output=True,text=True)
+            self.assertNotEqual(no_ack.returncode,0)
+            self.assertEqual(load(path)["tasks"][0]["status"],"blocked")
+            yes=subprocess.run(command+["--ack-reviewed","--reset-attempts"],
+                               capture_output=True,text=True)
+            self.assertEqual(yes.returncode,0,yes.stderr)
+            task=load(path)["tasks"][0]
+            self.assertEqual((task["status"],task["attempts"]),("pending",0))
 
     def test_save_load_and_bad_deps(self):
         with tempfile.TemporaryDirectory() as d:
