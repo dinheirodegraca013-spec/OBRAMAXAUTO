@@ -63,8 +63,9 @@ def recover(obj:dict):
     # Runner tem lock exclusivo: uma tarefa "running" é de sessão interrompida.
     for task in obj["tasks"]:
         if task["status"]=="running":
-            task["status"]="pending"
-            task["note"]="Retomada após execução interrompida; verifique evidências antes de marcar concluída."
+            task["status"]="blocked"
+            task["verification_passed"]=False
+            task["note"]="Interrompida: revisar alterações e possíveis efeitos externos antes de usar retry --ack-reviewed."
             task["updated_at"]=utcnow()
 
 def claim(task:dict,max_attempts:int):
@@ -102,6 +103,10 @@ def main():
     a=s.add_parser("add");a.add_argument("id");a.add_argument("title");a.add_argument("--deps",nargs="*",default=[])
     s.add_parser("list")
     d=s.add_parser("approve");d.add_argument("id")
+    retry=s.add_parser("retry")
+    retry.add_argument("id")
+    retry.add_argument("--ack-reviewed",action="store_true")
+    retry.add_argument("--reset-attempts",action="store_true")
     args=p.parse_args()
     path=Path(args.queue)
     if args.command=="list":
@@ -121,6 +126,16 @@ def main():
                 raise SystemExit("Apenas tarefas review podem ser aprovadas")
             task["status"]="done"
             task["updated_at"]=utcnow()
+        elif args.command=="retry":
+            task=next((item for item in obj["tasks"] if item["id"]==args.id),None)
+            if task is None or task["status"]!="blocked" or not args.ack_reviewed:
+                raise SystemExit("Retry exige tarefa blocked e --ack-reviewed após revisão.")
+            task["status"]="pending"
+            task["updated_at"]=utcnow()
+            task["note"]="Operador revisou interrupção e autorizou nova tentativa"
+            task["verification_passed"]=False
+            if args.reset_attempts:
+                task["attempts"]=0
         save(path,obj)
     print(json.dumps(obj,ensure_ascii=False,indent=2))
 if __name__=="__main__":main()

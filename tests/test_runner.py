@@ -333,6 +333,82 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual([item["status"] for item in load_queue(state_dir / "tasks.json")["tasks"]],
                              ["blocked", "blocked"])
 
+    def test_interrupted_cycle_requires_acknowledgment_before_codex(self):
+        import argparse
+        import subprocess
+        from unittest.mock import patch
+        import run_agent
+        from task_queue import add, claim, load as load_queue, save as save_queue
+        with tempfile.TemporaryDirectory() as folder:
+            repo=Path(folder)
+            subprocess.run(["git","init","-q",str(repo)],check=True)
+            (repo/"AGENTS.md").write_text("# regras",encoding="utf-8")
+            (repo/"ESCOPO.md").write_text("Escopo aprovado. "*30,encoding="utf-8")
+            subprocess.run(["git","-C",str(repo),"switch","-c","obramax/recovery-test"],
+                           check=True,capture_output=True)
+            state_dir=repo/".obramaxauto"
+            state_dir.mkdir()
+            queue={"version":1,"tasks":[]}
+            add(queue,"A","Alteração interrompida",[])
+            add(queue,"B","Independente",[])
+            claim(queue["tasks"][0],3)
+            save_queue(state_dir/"tasks.json",queue)
+            run_agent.save_state(state_dir/"runner-state.json",{
+                "branch":"obramax/recovery-test",
+                "total_cycles":1,
+                "inflight":{"cycle":1,"task_id":"A","baseline":"example"},
+                "history":[],
+            })
+            args=argparse.Namespace(target=str(repo),dry_run=False,queue=True,
+                worktree=False,max_cycles=2,max_hours=1,cycle_timeout=10,
+                cooldown=0,max_errors=3,max_stagnant=3,max_task_attempts=3,
+                verify_command=None,ack_interrupted=False)
+            with patch.object(run_agent.shutil,"which",return_value="fake-codex"):
+                with patch.object(run_agent,"run_cycle") as runner:
+                    with self.assertRaisesRegex(RuntimeError,"--ack-interrupted"):
+                        run_agent.loop(args)
+                    runner.assert_not_called()
+            self.assertEqual(load_queue(state_dir/"tasks.json")["tasks"][0]["status"],"running")
+            args.ack_interrupted=True
+            executed=[]
+            def fake_cycle(codex,target,logdir,cycle,timeout,task):
+                executed.append(task["id"])
+                return 0,"BLOCKED",str(logdir/"test.log")
+            with patch.object(run_agent.shutil,"which",return_value="fake-codex"):
+                with patch.object(run_agent,"run_cycle",side_effect=fake_cycle):
+                    self.assertEqual(run_agent.loop(args),1)
+            self.assertEqual(executed,["B"])
+            self.assertEqual([t["status"] for t in load_queue(state_dir/"tasks.json")["tasks"]],
+                             ["blocked","blocked"])
+            state=run_agent.load_state(state_dir/"runner-state.json")
+            self.assertNotIn("inflight",state)
+            self.assertEqual(state["last_recovery"]["blocked_tasks"],["A"])
+
+    def test_cycle_completion_clears_inflight_marker(self):
+        import argparse
+        import subprocess
+        from unittest.mock import patch
+        import run_agent
+        with tempfile.TemporaryDirectory() as folder:
+            repo=Path(folder)
+            subprocess.run(["git","init","-q",str(repo)],check=True)
+            (repo/"AGENTS.md").write_text("# regras",encoding="utf-8")
+            (repo/"ESCOPO.md").write_text("Escopo aprovado. "*30,encoding="utf-8")
+            args=argparse.Namespace(target=str(repo),dry_run=False,queue=False,
+                worktree=False,max_cycles=1,max_hours=1,cycle_timeout=10,
+                cooldown=0,max_errors=3,max_stagnant=3,max_task_attempts=3,
+                verify_command=None,ack_interrupted=False)
+            def fake_cycle(codex,target,logdir,cycle,timeout,task):
+                self.assertIn("inflight",run_agent.load_state(
+                    repo/".obramaxauto"/"runner-state.json"))
+                return 0,"CONTINUE",str(logdir/"test.log")
+            with patch.object(run_agent.shutil,"which",return_value="fake-codex"):
+                with patch.object(run_agent,"run_cycle",side_effect=fake_cycle):
+                    self.assertEqual(run_agent.loop(args),1)
+            state=run_agent.load_state(repo/".obramaxauto"/"runner-state.json")
+            self.assertNotIn("inflight",state)
+            self.assertTrue((repo/".obramaxauto"/"evidence"/"cycle-00001.json").is_file())
+
     def test_prompt_has_constraints(self):
         prompt = build_prompt(Path("/tmp/sample"), 3)
         self.assertIn("STATUS: BLOCKED", prompt)

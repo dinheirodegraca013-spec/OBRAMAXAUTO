@@ -31,3 +31,9 @@ As operações `add` e `approve` agora utilizam a mesma trava `runner.lock` do e
 
 ## Continuidade de tarefas independentes
 Quando uma tarefa fica em `review` ou `blocked`, o runner agora procura outras tarefas pendentes cujas dependências já estejam concluídas. Tentativas esgotadas são bloqueadas e ignoradas pelo agendador na mesma rodada, sem consumir um ciclo Codex. Dependências de tarefas `review` continuam **bloqueadas até aprovação humana**. O processo encerra com `TASK_REVIEW` quando requer revisão, `QUEUE_BLOCKED` quando nada pode avançar devido a bloqueios ou `QUEUE_IDLE` quando a fila não tem trabalhos executáveis. Os limites globais de ciclos, horas e erros continuam em vigor.
+
+## Recuperação após interrupção (revisão explícita)
+
+Antes de iniciar cada processo Codex, o runner persiste `inflight` em `.obramaxauto/runner-state.json`, com ID da tarefa, número do ciclo, baseline e branch. Após registrar as evidências do ciclo, remove o marcador. Se o computador, Codex ou runner encerrar abruptamente, **o próximo início recusa executar** enquanto houver marcador `inflight` ou tarefas `running`, evitando duplicação silenciosa de operações.
+
+Após revisar alterações, logs, efeitos em APIs externas e a worktree, execute novamente com `--ack-interrupted`. Tarefas `running` tornam-se **blocked**, nunca pendentes automaticamente. As independentes podem avançar, mas o item interrompido fica bloqueado até o operador revisar e usar `python scripts/task_queue.py --queue /caminho/do/projeto/.obramaxauto/tasks.json retry ID --ack-reviewed`. Se o limite de tentativas tiver sido consumido, acrescente `--reset-attempts` somente após avaliar o risco de repetir a operação. Essas confirmações não significam teste aprovado nem liberação de deploy. O mecanismo funciona apenas com os arquivos locais preservados; perda do disco continua exigindo backup.

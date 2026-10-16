@@ -407,12 +407,33 @@ def loop(args: argparse.Namespace) -> int:
         state["last_run_start"] = datetime.now(timezone.utc).isoformat()
         save_state(statefile, state)
         queue_path = state_dir / "tasks.json"
+        q = None
         if args.queue:
             q = load_queue(queue_path)
             if not q["tasks"]:
                 raise ValueError("Fila vazia: adicione tarefas com scripts/task_queue.py antes de --queue.")
-            recover_queue(q)
-            save_queue(queue_path, q)
+        crashed = state.get("inflight")
+        was_running = [task["id"] for task in q["tasks"] if task["status"] == "running"] if q else []
+        if crashed or was_running:
+            if not getattr(args, "ack_interrupted", False):
+                raise RuntimeError(
+                    "Execução interrompida detectada; examine arquivos/logs e eventuais efeitos "
+                    "externos antes de retomar com --ack-interrupted. Tarefas running não "
+                    "serão executadas novamente automaticamente."
+                )
+            # A confirmação não aprova nem reexecuta as tarefas interrompidas.
+            # Somente tarefas independentes podem avançar.
+            if q:
+                recover_queue(q)
+                save_queue(queue_path, q)
+            state["last_recovery"] = {
+                "date": datetime.now(timezone.utc).isoformat(),
+                "inflight": crashed,
+                "blocked_tasks": was_running,
+                "operator_acknowledged": True,
+            }
+            state.pop("inflight", None)
+            save_state(statefile, state)
         print("OBRAMAXAUTO", "| branch:", branch, "| máximo de ciclos:", args.max_cycles)
         start = time.monotonic()
         end_reason = "LIMIT_REACHED"
@@ -438,6 +459,16 @@ def loop(args: argparse.Namespace) -> int:
                     break
             cycle = int(state.get("total_cycles", 0)) + 1
             before = fingerprint(target)
+            # Persistir o marco ANTES de iniciar o Codex: uma queda não pode
+            # converter trabalho com efeitos colaterais em nova tentativa cega.
+            state["inflight"] = {
+                "cycle": cycle,
+                "task_id": task["id"] if task else None,
+                "started_at": datetime.now(timezone.utc).isoformat(),
+                "baseline": before,
+                "branch": branch,
+            }
+            save_state(statefile, state)
             print(f"Iniciando ciclo {cycle}...")
             code, status, log = run_cycle(
                 codex, target, state_dir, cycle,
@@ -473,8 +504,9 @@ def loop(args: argparse.Namespace) -> int:
             state["total_cycles"] = cycle
             state["last_status"] = status
             state["history"] = (state.get("history", []) + [record])[-100:]
-            save_state(statefile, state)
             write_cycle_evidence(state_dir, record, task)
+            state.pop("inflight", None)
+            save_state(statefile, state)
             print(f"Ciclo {cycle}: status={status}, rc={code}, mudou={progressed}, log={log}")
             if args.queue and task["status"] == "review":
                 if next_task(q) is None:
@@ -520,6 +552,8 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--queue", action="store_true", help="Consumir fila local persistente tasks.json")
     parser.add_argument("--worktree", action="store_true", help="Executar em worktree isolada sem alterar a branch do projeto original")
+    parser.add_argument("--ack-interrupted", action="store_true",
+                        help="Confirmar revisão de uma execução interrompida; bloqueia suas tarefas running")
     parser.add_argument("--max-task-attempts", type=int, default=3)
     parser.add_argument("--verify-command", help="Comando de testes configurado pelo operador; obrigatório para concluir tarefa da fila")
     args = parser.parse_args()
