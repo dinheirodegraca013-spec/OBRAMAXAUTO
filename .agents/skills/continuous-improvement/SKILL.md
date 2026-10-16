@@ -17,6 +17,7 @@ Procurar melhorias contínuas autorizadas após cumprir requisitos ou durante ma
 6. Adicionar teste de regressão reproduzindo o defeito identificado antes de afirmar que foi corrigido.
 7. Validar o ciclo completo por testes locais ou CI, inclusive saídas ausentes, antigas e erros não-zero do executor.
 8. Registrar separadamente validação com Codex real e validação simulada; nunca confundir as duas.
+9. Não classificar mera reescrita de ESTADO.md, BACKLOG.md, TESTES.md, AUDITORIA.md ou ACEITE.md como progresso funcional; comparar artefatos reais e testes.
 
 ## Guardrails inegociáveis
 - Trabalhar apenas em repositório e ambiente expressamente autorizados. Nunca tocar produção, projeto alheio, dados reais ou credenciais sem escopo e autorização específicos.

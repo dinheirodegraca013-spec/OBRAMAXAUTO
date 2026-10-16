@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from run_agent import parse_status, acceptance_gate, build_prompt, run_cycle
+from run_agent import parse_status, acceptance_gate, build_prompt, run_cycle, fingerprint
 
 
 class RunnerTests(unittest.TestCase):
@@ -69,6 +69,38 @@ class RunnerTests(unittest.TestCase):
             (root / "TESTES.md").write_text("Caso 1: PASS\n", encoding="utf-8")
             (root / "AUDITORIA.md").write_text("Parecer final: PASS\n", encoding="utf-8")
             self.assertTrue(acceptance_gate(root)[0])
+
+    def test_progress_ignores_housekeeping_only(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            (root / "app.py").write_text("print('ok')\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(root), "add", "app.py"], check=True)
+            subprocess.run([
+                "git", "-C", str(root), "-c", "user.name=Test",
+                "-c", "user.email=test@example.invalid", "commit", "-qm", "init"
+            ], check=True)
+            baseline = fingerprint(root)
+            (root / "ESTADO.md").write_text("Ciclo 1\n", encoding="utf-8")
+            (root / "BACKLOG.md").write_text("Próximo\n", encoding="utf-8")
+            self.assertEqual(baseline, fingerprint(root))
+            (root / "ESTADO.md").write_text("Ciclo 2\n", encoding="utf-8")
+            self.assertEqual(baseline, fingerprint(root))
+            (root / "app.py").write_text("print('corrigido')\n", encoding="utf-8")
+            self.assertNotEqual(baseline, fingerprint(root))
+
+    def test_progress_counts_new_project_files_not_reports(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            baseline = fingerprint(root)
+            (root / "TESTES.md").write_text("Testes planejados\n", encoding="utf-8")
+            self.assertEqual(baseline, fingerprint(root))
+            (root / "src").mkdir()
+            (root / "src" / "new.py").write_text("answer = 42\n", encoding="utf-8")
+            self.assertNotEqual(baseline, fingerprint(root))
 
     def test_prompt_has_constraints(self):
         prompt = build_prompt(Path("/tmp/sample"), 3)

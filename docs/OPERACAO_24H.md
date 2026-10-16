@@ -31,3 +31,6 @@ Ao usar políticas sem aprovação interativa, mantenha --sandbox workspace-writ
 
 ## Confiabilidade dos sinais de conclusão
 O runner só aceita `STATUS: READY`, `STATUS: CONTINUE` ou `STATUS: BLOCKED` como última linha não vazia da saída final da execução bem-sucedida. Não aceita texto citado no meio da resposta nem reutiliza um arquivo de status de um ciclo anterior. Os testes automatizados usam um Codex simulado; isso não comprova autenticação, rede ou execução do Codex real no seu ambiente.
+
+## Progresso útil x documentação
+O watchdog não considera mudanças apenas em `ESTADO.md`, `BACKLOG.md`, `TESTES.md`, `AUDITORIA.md` ou `ACEITE.md` como avanço de implementação. Essas atualizações continuam registradas no Git, mas não reiniciam o limite de estagnação. Alterações em código, configurações, novos arquivos de produto e documentação técnica fora desses cinco arquivos contam como progresso. Após vários ciclos de relatórios sem resultados verificáveis, o executor encerra com `NO_PROGRESS` para evitar consumo improdutivo de tokens.
