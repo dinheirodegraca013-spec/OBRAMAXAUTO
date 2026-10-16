@@ -25,3 +25,6 @@ Uma resposta READY sem teste aprovado NÃO encerra o projeto nem a execução em
 
 ## Validação do grafo de tarefas
 Ao carregar `tasks.json`, o sistema verifica todas as dependências, inclusive ciclos indiretos entre três ou mais tarefas. Filas circulares ou com dependências duplicadas falham com mensagem explícita, em vez de permanecerem inativas indefinidamente. O fluxo válido continua exigindo revisão humana para marcar uma tarefa como concluída.
+
+## Proteção contra alterações concorrentes
+As operações `add` e `approve` agora utilizam a mesma trava `runner.lock` do executor. Se o runner estiver ativo, a CLI falha de forma explícita em vez de substituir o JSON da fila durante uma execução. A leitura `list` permanece disponível. Não remova manualmente o arquivo de trava.

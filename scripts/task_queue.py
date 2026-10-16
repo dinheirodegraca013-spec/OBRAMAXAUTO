@@ -102,12 +102,25 @@ def main():
     a=s.add_parser("add");a.add_argument("id");a.add_argument("title");a.add_argument("--deps",nargs="*",default=[])
     s.add_parser("list")
     d=s.add_parser("approve");d.add_argument("id")
-    args=p.parse_args();path=Path(args.queue);obj=load(path)
-    if args.command=="add":
-        add(obj,args.id,args.title,args.deps);save(path,obj)
-    elif args.command=="approve":
-        t=next((t for t in obj["tasks"] if t["id"]==args.id),None)
-        if t is None or t["status"]!="review":raise SystemExit("Apenas tarefas review podem ser aprovadas")
-        t["status"]="done";t["updated_at"]=utcnow();save(path,obj)
+    args=p.parse_args()
+    path=Path(args.queue)
+    if args.command=="list":
+        print(json.dumps(load(path),ensure_ascii=False,indent=2))
+        return
+    # Usar a MESMA trava do runner para impedir perda silenciosa de tarefas.
+    # Import local evita dependência circular ao importar este módulo nos testes.
+    from run_agent import acquire_lock
+    path.parent.mkdir(parents=True,exist_ok=True)
+    with acquire_lock(path.parent / "runner.lock"):
+        obj=load(path)
+        if args.command=="add":
+            add(obj,args.id,args.title,args.deps)
+        elif args.command=="approve":
+            task=next((item for item in obj["tasks"] if item["id"]==args.id),None)
+            if task is None or task["status"]!="review":
+                raise SystemExit("Apenas tarefas review podem ser aprovadas")
+            task["status"]="done"
+            task["updated_at"]=utcnow()
+        save(path,obj)
     print(json.dumps(obj,ensure_ascii=False,indent=2))
 if __name__=="__main__":main()
