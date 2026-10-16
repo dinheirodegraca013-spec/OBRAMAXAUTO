@@ -246,17 +246,32 @@ def run_cycle(codex: str, target: Path, logdir: Path, cycle: int, timeout: int, 
     prompt = build_prompt(target, cycle, task)
     try:
         with logfile.open("w", encoding="utf-8") as handle:
-            completed = subprocess.run(
-                command, input=prompt, text=True,
+            # Sessão/grupo próprio para interromper subprocessos do agente.
+            group_kwargs = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+                            if os.name == "nt" else {"start_new_session": True})
+            proc = subprocess.Popen(
+                command, stdin=subprocess.PIPE,
                 stdout=handle, stderr=subprocess.STDOUT,
-                cwd=target, timeout=timeout, check=False,
+                cwd=target, text=True, **group_kwargs,
             )
-        message = answer.read_text(encoding="utf-8") if completed.returncode == 0 and answer.is_file() else ""
-        return completed.returncode, parse_status(message), str(logfile)
-    except subprocess.TimeoutExpired:
-        with logfile.open("a", encoding="utf-8") as handle:
-            handle.write("\nTIMEOUT: ciclo excedeu limite.\n")
-        return 124, "UNKNOWN", str(logfile)
+            try:
+                proc.communicate(input=prompt, timeout=timeout)
+            except subprocess.TimeoutExpired:
+                if os.name == "nt":
+                    # taskkill /T encerra descendentes no Windows.
+                    subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                                   capture_output=True, check=False, timeout=15)
+                else:
+                    import signal
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                proc.communicate(timeout=15)
+                handle.write("\nTIMEOUT: ciclo e subprocessos encerrados.\n")
+                return 124, "UNKNOWN", str(logfile)
+        message = answer.read_text(encoding="utf-8") if proc.returncode == 0 and answer.is_file() else ""
+        return proc.returncode, parse_status(message), str(logfile)
 
 
 def verify_task(target: Path, command: str | None, timeout: int = 300) -> bool:
