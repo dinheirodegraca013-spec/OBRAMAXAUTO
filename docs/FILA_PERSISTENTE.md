@@ -22,3 +22,6 @@ O runner agora exige que o operador configure um comando de testes para a fila c
 
 ## READY rejeitado pelo gate
 Uma resposta READY sem teste aprovado NÃO encerra o projeto nem a execução em modo de fila. O estado da tarefa volta a `pending` (ou `blocked` quando atingido limite de tentativas). Apenas `review` representa tarefa pronta para análise humana; o runner retorna sucesso quando atinge esse estado, mas não dá baixa automática na tarefa.
+
+## Validação do grafo de tarefas
+Ao carregar `tasks.json`, o sistema verifica todas as dependências, inclusive ciclos indiretos entre três ou mais tarefas. Filas circulares ou com dependências duplicadas falham com mensagem explícita, em vez de permanecerem inativas indefinidamente. O fluxo válido continua exigindo revisão humana para marcar uma tarefa como concluída.
