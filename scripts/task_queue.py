@@ -61,12 +61,13 @@ def claim(task:dict,max_attempts:int):
     task["updated_at"]=utcnow()
     return True
 
-def complete(task:dict,status:str,exit_code:int,log:str,progress:bool):
+def complete(task:dict,status:str,exit_code:int,log:str,progress:bool,verified:bool=False):
     # Somente READY com execução bem-sucedida e progresso real vai para revisão humana.
-    task["status"]="review" if status=="READY" and exit_code==0 and progress else ("blocked" if status=="BLOCKED" else "pending")
+    task["status"]="review" if status=="READY" and exit_code==0 and progress and verified else ("blocked" if status=="BLOCKED" else "pending")
     task["last_exit_code"]=exit_code
     task["last_log"]=log
     task["last_status"]=status
+    task["verification_passed"]=verified
     task["updated_at"]=utcnow()
     task["note"]="Revisão humana obrigatória antes de marcar done" if task["status"]=="review" else "Aguardando nova tentativa ou diagnóstico"
 
