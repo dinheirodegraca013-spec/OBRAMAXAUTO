@@ -21,6 +21,10 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 VALID_STATUS = {"CONTINUE", "READY", "BLOCKED"}
 STATUS_RE = re.compile(r"STATUS:\s*(CONTINUE|READY|BLOCKED)")
+# Arquivos de coordenação podem mudar todo ciclo, sem progresso na entrega.
+HOUSEKEEPING_FILES = frozenset({
+    "ESTADO.md", "BACKLOG.md", "TESTES.md", "AUDITORIA.md", "ACEITE.md"
+})
 
 
 def parse_status(message: str) -> str:
@@ -82,15 +86,41 @@ def ensure_branch(target: Path, state: dict) -> str:
 
 
 def fingerprint(target: Path) -> str:
+    """Resume alterações no produto, ignorando relatórios que o agente reescreve.
+
+    Atualizar apenas BACKLOG/ESTADO/TESTES/AUDITORIA/ACEITE não reinicia
+    artificialmente o watchdog de progresso. Alterações reais em arquivos
+    rastreados ou novos arquivos não rastreados continuam contando.
+    """
     digest = hashlib.sha256()
-    for command in [("rev-parse", "HEAD"), ("diff", "HEAD", "--binary"), ("status", "--porcelain")]:
+    # Repositórios novos podem ainda não ter HEAD: aceite o primeiro ciclo.
+    head = subprocess.run(
+        ["git", "-C", str(target), "rev-parse", "--verify", "HEAD"],
+        capture_output=True, text=True, check=False,
+    )
+    pathspecs = ["."] + [":(exclude)" + name for name in sorted(HOUSEKEEPING_FILES)]
+    if head.returncode == 0:
+        digest.update(head.stdout.strip().encode("utf-8"))
+        # git diff HEAD cobre index + worktree, inclusive alterações staged.
+        changes = [("diff", "HEAD", "--binary", "--", *pathspecs)]
+    else:
+        digest.update(b"unborn-git-history")
+        # Sem commit inicial: considerar arquivos staged e worktree.
+        changes = [
+            ("diff", "--cached", "--binary", "--", *pathspecs),
+            ("diff", "--binary", "--", *pathspecs),
+        ]
+    for command in changes:
         digest.update(git(target, *command).encode("utf-8", errors="replace"))
     p = subprocess.run(
         ["git", "-C", str(target), "ls-files", "--others", "--exclude-standard", "-z"],
         capture_output=True, check=True,
     )
     for raw in sorted(part for part in p.stdout.split(b"\x00") if part):
-        path = (target / os.fsdecode(raw))
+        relative = os.fsdecode(raw).replace("\\", "/")
+        if relative in HOUSEKEEPING_FILES:
+            continue
+        path = target / os.fsdecode(raw)
         digest.update(raw)
         # Nunca seguir symlink de arquivo não rastreado para fora do projeto.
         if path.is_file() and not path.is_symlink():
@@ -101,7 +131,6 @@ def fingerprint(target: Path) -> str:
             except OSError:
                 pass
     return digest.hexdigest()
-
 
 def acceptance_gate(target: Path) -> tuple[bool, str]:
     acceptance = target / "ACEITE.md"
