@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from run_agent import parse_status, acceptance_gate, build_prompt, run_cycle, fingerprint
+from run_agent import parse_status, acceptance_gate, build_prompt, run_cycle, fingerprint, acquire_lock
 
 
 class RunnerTests(unittest.TestCase):
@@ -101,6 +101,30 @@ class RunnerTests(unittest.TestCase):
             (root / "src").mkdir()
             (root / "src" / "new.py").write_text("answer = 42\n", encoding="utf-8")
             self.assertNotEqual(baseline, fingerprint(root))
+
+    def test_lock_blocks_concurrent_runner_and_recovers_after_close(self):
+        with tempfile.TemporaryDirectory() as temp:
+            lockfile = Path(temp) / "runner.lock"
+            first = acquire_lock(lockfile)
+            try:
+                with self.assertRaisesRegex(RuntimeError, "Outro runner"):
+                    acquire_lock(lockfile)
+            finally:
+                first.close()
+            # O arquivo permanece no disco, mas a trava termina ao fechar.
+            self.assertTrue(lockfile.exists())
+            second = acquire_lock(lockfile)
+            second.close()
+
+    def test_lock_recovers_from_stale_pid_file(self):
+        with tempfile.TemporaryDirectory() as temp:
+            lockfile = Path(temp) / "runner.lock"
+            lockfile.write_text("PID=999999999\\n", encoding="utf-8")
+            handle = acquire_lock(lockfile)
+            try:
+                self.assertIn("PID=", lockfile.read_text(encoding="utf-8"))
+            finally:
+                handle.close()
 
     def test_prompt_has_constraints(self):
         prompt = build_prompt(Path("/tmp/sample"), 3)

@@ -175,13 +175,36 @@ def save_state(path: Path, data: dict) -> None:
     temp.replace(path)
 
 
-def acquire_lock(path: Path) -> None:
+def acquire_lock(path: Path):
+    """Trava pelo sistema operacional; o lock libera mesmo após queda do processo.
+
+    Não remova o arquivo ao sair: desvincular um inode bloqueado criaria
+    uma janela onde outro processo poderia abrir um arquivo novo sem lock.
+    """
+    fd = os.open(str(path), os.O_CREAT | os.O_RDWR, 0o600)
+    handle = os.fdopen(fd, "r+", encoding="utf-8")
     try:
-        fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    except FileExistsError as exc:
-        raise RuntimeError("Já existe lock. Verifique outro runner em operação antes de apagar " + str(path)) from exc
-    with os.fdopen(fd, "w", encoding="utf-8") as stream:
-        stream.write(str(os.getpid()) + "\n")
+        if os.name == "nt":
+            import msvcrt
+            # Lock de um byte requer pelo menos um byte no Windows.
+            handle.seek(0)
+            if not handle.read(1):
+                handle.seek(0)
+                handle.write(" ")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        # O conteúdo do arquivo é apenas diagnóstico, não define a exclusão.
+        handle.seek(0)
+        handle.write(("PID=" + str(os.getpid()) + "\n").ljust(80))
+        handle.flush()
+        return handle
+    except OSError as exc:
+        handle.close()
+        raise RuntimeError("Outro runner mantém a trava do projeto: " + str(path)) from exc
 
 
 def build_prompt(target: Path, cycle: int) -> str:
@@ -254,7 +277,7 @@ def loop(args: argparse.Namespace) -> int:
                 stream.write("\n.obramaxauto/\n")
     statefile = state_dir / "runner-state.json"
     lockfile = state_dir / "runner.lock"
-    acquire_lock(lockfile)
+    lock_handle = acquire_lock(lockfile)
     try:
         state = load_state(statefile)
         branch = ensure_branch(target, state)
@@ -320,7 +343,7 @@ def loop(args: argparse.Namespace) -> int:
         print("Revise alterações e testes antes de abrir PR ou publicar.")
         return 0 if end_reason == "READY_FOR_HUMAN_REVIEW" else 1
     finally:
-        lockfile.unlink(missing_ok=True)
+        lock_handle.close()
 
 
 def main() -> int:
