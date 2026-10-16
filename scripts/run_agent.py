@@ -323,7 +323,10 @@ def loop(args: argparse.Namespace) -> int:
             )
             after = fingerprint(target)
             progressed = before != after
-            if args.queue:\n                complete(task, status, code, Path(log).name, progressed)\n                save_queue(queue_path, q)\n            if code:
+            if args.queue:
+                complete(task, status, code, Path(log).name, progressed)
+                save_queue(queue_path, q)
+            if code:
                 state["consecutive_errors"] = int(state.get("consecutive_errors", 0)) + 1
             else:
                 state["consecutive_errors"] = 0
@@ -343,7 +346,11 @@ def loop(args: argparse.Namespace) -> int:
             state["history"] = (state.get("history", []) + [record])[-100:]
             save_state(statefile, state)
             print(f"Ciclo {cycle}: status={status}, rc={code}, mudou={progressed}, log={log}")
-            if args.queue and task["status"] == "review":\n                end_reason = "TASK_REVIEW"\n                break\n            if status == "READY" and code == 0:\n                end_reason = "READY_FOR_HUMAN_REVIEW"
+            if args.queue and task["status"] == "review":
+                end_reason = "TASK_REVIEW"
+                break
+            if status == "READY" and code == 0:
+                end_reason = "READY_FOR_HUMAN_REVIEW"
                 break
             if status == "BLOCKED" and code == 0:
                 end_reason = "BLOCKED"
@@ -376,7 +383,10 @@ def main() -> int:
     parser.add_argument("--cooldown", type=int, default=5)
     parser.add_argument("--max-errors", type=int, default=3)
     parser.add_argument("--max-stagnant", type=int, default=3)
-    parser.add_argument("--dry-run", action="store_true")\n    parser.add_argument("--queue", action="store_true", help="Consumir fila local persistente tasks.json")\n    parser.add_argument("--max-task-attempts", type=int, default=3)\n    args = parser.parse_args()
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--queue", action="store_true", help="Consumir fila local persistente tasks.json")
+    parser.add_argument("--max-task-attempts", type=int, default=3)
+    args = parser.parse_args()
     if (args.max_cycles < 1 or args.max_hours <= 0 or args.cycle_timeout < 1
             or args.cooldown < 0 or args.max_errors < 1 or args.max_stagnant < 1 or args.max_task_attempts < 1):
         parser.error("Todos os limites devem ser positivos (cooldown pode ser zero).")
