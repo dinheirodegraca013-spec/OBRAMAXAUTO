@@ -11,3 +11,4 @@ Camadas: (1) instruções versionadas em Markdown, (2) catálogo de skills sob d
 **Concorrência**: versão inicial executa um Codex por vez para evitar alteração simultânea dos arquivos e banco. Skills sobre paralelismo descrevem um futuro recurso, não afirmam que já esteja implementado.
 
 **Ambientes**: repositório de kit (OBRAMAXAUTO), repositório de app (NEXUS etc.), Supabase de desenvolvimento e Vercel Preview separados. Nunca confundir o kit com o produto.
+\n**Fila opcional:** `scripts/task_queue.py` registra itens no disco do projeto-alvo, com dependências, tentativas e estados `pending/running/review/blocked/done`; `run_agent.py --queue` seleciona um item por ciclo e requer revisão humana para liberar dependências. Não é uma implementação do Symphony, nem possui distribuição multi-host.\n

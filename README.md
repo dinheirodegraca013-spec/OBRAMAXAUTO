@@ -44,3 +44,4 @@ A skill `.agents/skills/github-agent-research/SKILL.md` ensina o agente a procur
 ## Provas de conceito isoladas
 
 Para medir orquestração, detectar ferramentas de navegador e analisar skills externas sem executar código desconhecido, consulte [POC de adoção segura](docs/POC_ADOCAO_SEGURA.md) e os scripts `compare_agent_runs.py`, `browser_preflight.py` e `skill_guard.py`. A presença desses scripts não significa que Ralphex, Symphony ou Playwright foram instalados ou testados em produção.
+\n## Fila persistente de tarefas (experimental)\n\nA execução opcional `--queue` lê tarefas registradas em `.obramaxauto/tasks.json`, acompanha tentativas, dependências e revisão humana. Consulte [FILA_PERSISTENTE.md](docs/FILA_PERSISTENTE.md). A fila é local e não publica em produção.\n
