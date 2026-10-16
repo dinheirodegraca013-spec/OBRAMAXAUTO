@@ -62,6 +62,23 @@ class TaskQueueTests(unittest.TestCase):
             save(path, q)
             self.assertEqual(len(load(path)["tasks"]), 3)
 
+    def test_cli_refuses_write_during_runner_lock(self):
+        import subprocess
+        from run_agent import acquire_lock
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/".obramaxauto"/"tasks.json"
+            path.parent.mkdir()
+            script=Path(__file__).resolve().parents[1]/"scripts"/"task_queue.py"
+            with acquire_lock(path.parent/"runner.lock"):
+                proc=subprocess.run([sys.executable,str(script),"--queue",str(path),
+                    "add","A","Primeira tarefa"],capture_output=True,text=True)
+                self.assertNotEqual(proc.returncode,0)
+                self.assertFalse(path.exists())
+            proc=subprocess.run([sys.executable,str(script),"--queue",str(path),
+                "add","A","Primeira tarefa"],capture_output=True,text=True)
+            self.assertEqual(proc.returncode,0,proc.stderr)
+            self.assertEqual(load(path)["tasks"][0]["id"],"A")
+
     def test_save_load_and_bad_deps(self):
         with tempfile.TemporaryDirectory() as d:
             path=Path(d)/"state"/"queue.json"
