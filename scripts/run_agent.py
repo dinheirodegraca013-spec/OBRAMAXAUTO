@@ -272,6 +272,10 @@ def run_cycle(codex: str, target: Path, logdir: Path, cycle: int, timeout: int, 
                 return 124, "UNKNOWN", str(logfile)
         message = answer.read_text(encoding="utf-8") if proc.returncode == 0 and answer.is_file() else ""
         return proc.returncode, parse_status(message), str(logfile)
+    except OSError as error:
+        with logfile.open("a", encoding="utf-8") as handle:
+            handle.write("\nERRO: " + str(error) + "\n")
+        return 125, "UNKNOWN", str(logfile)
 
 
 def verify_task(target: Path, command: str | None, timeout: int = 300) -> bool:
