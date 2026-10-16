@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import time
+from task_queue import load as load_queue, save as save_queue, recover as recover_queue, next_task, claim, complete
 
 ROOT = Path(__file__).resolve().parents[1]
 VALID_STATUS = {"CONTINUE", "READY", "BLOCKED"}
@@ -207,7 +208,7 @@ def acquire_lock(path: Path):
         raise RuntimeError("Outro runner mantém a trava do projeto: " + str(path)) from exc
 
 
-def build_prompt(target: Path, cycle: int) -> str:
+def build_prompt(target: Path, cycle: int, task: dict | None = None) -> str:
     return (
         "Atue apenas neste repositório local autorizado: " + str(target) + "\n"
         "Ciclo " + str(cycle) + ". Leia AGENTS.md, OBRAMAXAUTO.md (se houver), "
@@ -223,10 +224,12 @@ def build_prompt(target: Path, cycle: int) -> str:
         "READY só após ACEITE.md todo marcado, evidências de testes e "
         "AUDITORIA.md contendo Parecer final: PASS. "
         "Nunca fabrique testes ou resultados."
-    )
+        + ("\nTAREFA AUTORIZADA DA FILA: [" + task["id"] + "] " + task["title"]
+           + ". Trabalhe especificamente nela; não mude o estado da fila diretamente. "
+           + "Se faltar condição de autorização, declare BLOCKED." if task else "")    )
 
 
-def run_cycle(codex: str, target: Path, logdir: Path, cycle: int, timeout: int) -> tuple[int, str, str]:
+def run_cycle(codex: str, target: Path, logdir: Path, cycle: int, timeout: int, task: dict | None = None) -> tuple[int, str, str]:
     logfile = logdir / f"cycle-{cycle:05d}.log"
     answer = logdir / f"cycle-{cycle:05d}-last.txt"
     # Falhas, quedas e ciclos reexecutados não podem reaproveitar STATUS antigo.
@@ -238,7 +241,7 @@ def run_cycle(codex: str, target: Path, logdir: Path, cycle: int, timeout: int) 
         "--output-last-message", str(answer),
         "-",
     ]
-    prompt = build_prompt(target, cycle)
+    prompt = build_prompt(target, cycle, task)
     try:
         with logfile.open("w", encoding="utf-8") as handle:
             completed = subprocess.run(
@@ -285,6 +288,13 @@ def loop(args: argparse.Namespace) -> int:
         state["target"] = str(target)
         state["last_run_start"] = datetime.now(timezone.utc).isoformat()
         save_state(statefile, state)
+        queue_path = state_dir / "tasks.json"
+        if args.queue:
+            q = load_queue(queue_path)
+            if not q["tasks"]:
+                raise ValueError("Fila vazia: adicione tarefas com scripts/task_queue.py antes de --queue.")
+            recover_queue(q)
+            save_queue(queue_path, q)
         print("OBRAMAXAUTO", "| branch:", branch, "| máximo de ciclos:", args.max_cycles)
         start = time.monotonic()
         end_reason = "LIMIT_REACHED"
@@ -292,21 +302,36 @@ def loop(args: argparse.Namespace) -> int:
             remaining = args.max_hours * 3600 - (time.monotonic() - start)
             if remaining < 10:
                 break
+            task = None
+            if args.queue:
+                q = load_queue(queue_path)
+                task = next_task(q)
+                if task is None:
+                    end_reason = "QUEUE_IDLE"
+                    break
+                if not claim(task, args.max_task_attempts):
+                    save_queue(queue_path, q)
+                    end_reason = "TASK_ATTEMPT_LIMIT"
+                    break
+                save_queue(queue_path, q)
             cycle = int(state.get("total_cycles", 0)) + 1
             before = fingerprint(target)
             print(f"Iniciando ciclo {cycle}...")
             code, status, log = run_cycle(
                 codex, target, state_dir, cycle,
-                max(1, min(args.cycle_timeout, int(remaining))),
+                max(1, min(args.cycle_timeout, int(remaining))), task,
             )
             after = fingerprint(target)
             progressed = before != after
+            if args.queue:
+                complete(task, status, code, Path(log).name, progressed)
+                save_queue(queue_path, q)
             if code:
                 state["consecutive_errors"] = int(state.get("consecutive_errors", 0)) + 1
             else:
                 state["consecutive_errors"] = 0
             state["stagnant_cycles"] = 0 if progressed else int(state.get("stagnant_cycles", 0)) + 1
-            if status == "READY":
+            if status == "READY" and not args.queue:
                 ok, reason = acceptance_gate(target)
                 if not ok:
                     print("READY não aceito:", reason)
@@ -321,6 +346,9 @@ def loop(args: argparse.Namespace) -> int:
             state["history"] = (state.get("history", []) + [record])[-100:]
             save_state(statefile, state)
             print(f"Ciclo {cycle}: status={status}, rc={code}, mudou={progressed}, log={log}")
+            if args.queue and task["status"] == "review":
+                end_reason = "TASK_REVIEW"
+                break
             if status == "READY" and code == 0:
                 end_reason = "READY_FOR_HUMAN_REVIEW"
                 break
@@ -356,9 +384,11 @@ def main() -> int:
     parser.add_argument("--max-errors", type=int, default=3)
     parser.add_argument("--max-stagnant", type=int, default=3)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--queue", action="store_true", help="Consumir fila local persistente tasks.json")
+    parser.add_argument("--max-task-attempts", type=int, default=3)
     args = parser.parse_args()
     if (args.max_cycles < 1 or args.max_hours <= 0 or args.cycle_timeout < 1
-            or args.cooldown < 0 or args.max_errors < 1 or args.max_stagnant < 1):
+            or args.cooldown < 0 or args.max_errors < 1 or args.max_stagnant < 1 or args.max_task_attempts < 1):
         parser.error("Todos os limites devem ser positivos (cooldown pode ser zero).")
     try:
         return loop(args)
