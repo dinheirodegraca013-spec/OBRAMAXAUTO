@@ -18,6 +18,7 @@ Procurar melhorias contínuas autorizadas após cumprir requisitos ou durante ma
 7. Validar o ciclo completo por testes locais ou CI, inclusive saídas ausentes, antigas e erros não-zero do executor.
 8. Registrar separadamente validação com Codex real e validação simulada; nunca confundir as duas.
 9. Não classificar mera reescrita de ESTADO.md, BACKLOG.md, TESTES.md, AUDITORIA.md ou ACEITE.md como progresso funcional; comparar artefatos reais e testes.
+10. Quando uma limitação exigir tecnologia externa ou no início de uma revisão planejada, ativar github-agent-research para avaliar ferramentas públicas; não pesquisar a cada ciclo, não executar código de terceiros nem importar novas skills automaticamente.
 
 ## Guardrails inegociáveis
 - Trabalhar apenas em repositório e ambiente expressamente autorizados. Nunca tocar produção, projeto alheio, dados reais ou credenciais sem escopo e autorização específicos.
