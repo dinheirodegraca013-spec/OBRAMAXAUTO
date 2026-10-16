@@ -54,6 +54,35 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(code, 2)
             self.assertEqual(status, "UNKNOWN")
 
+    @unittest.skipIf(sys.platform == "win32", "Teste de grupo de processos POSIX")
+    def test_timeout_kills_descendant_process(self):
+        import os
+        import stat
+        import time
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            agent = root / "fake-agent.py"
+            pidfile = root / "child.pid"
+            agent.write_text(
+                "#!/usr/bin/env python3\n"
+                "import subprocess,sys,time,pathlib\n"
+                "child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(120)'])\n"
+                "pathlib.Path('child.pid').write_text(str(child.pid))\n"
+                "time.sleep(120)\n", encoding="utf-8")
+            agent.chmod(agent.stat().st_mode | stat.S_IXUSR)
+            rc,status,_ = run_cycle(str(agent), root, root, 1, 1)
+            self.assertEqual((rc,status),(124,"UNKNOWN"))
+            self.assertTrue(pidfile.exists())
+            pid=int(pidfile.read_text())
+            # Em Linux, descendentes mortos podem estar zumbis ou já recolhidos.
+            if sys.platform.startswith("linux"):
+                state_file = Path(f"/proc/{pid}/stat")
+                state = state_file.read_text().split()[2] if state_file.exists() else "gone"
+                self.assertIn(state, {"Z", "gone"})
+            else:
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(pid, 0)
+
     def test_gate_rejects_unchecked(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
