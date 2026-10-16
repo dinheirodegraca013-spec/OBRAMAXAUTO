@@ -20,12 +20,14 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 VALID_STATUS = {"CONTINUE", "READY", "BLOCKED"}
-STATUS_RE = re.compile(r"^STATUS:\s*(CONTINUE|READY|BLOCKED)\s*$", re.MULTILINE)
+STATUS_RE = re.compile(r"STATUS:\s*(CONTINUE|READY|BLOCKED)")
 
 
 def parse_status(message: str) -> str:
-    matches = STATUS_RE.findall(message)
-    return matches[-1] if matches else "UNKNOWN"
+    """O status só é válido como ÚLTIMA linha não vazia, nunca no meio da resposta."""
+    last = next((line.strip() for line in reversed(message.splitlines()) if line.strip()), "")
+    match = STATUS_RE.fullmatch(last)
+    return match.group(1) if match else "UNKNOWN"
 
 
 def git(target: Path, *args: str, check: bool = True) -> str:
@@ -175,6 +177,8 @@ def build_prompt(target: Path, cycle: int) -> str:
 def run_cycle(codex: str, target: Path, logdir: Path, cycle: int, timeout: int) -> tuple[int, str, str]:
     logfile = logdir / f"cycle-{cycle:05d}.log"
     answer = logdir / f"cycle-{cycle:05d}-last.txt"
+    # Falhas, quedas e ciclos reexecutados não podem reaproveitar STATUS antigo.
+    answer.unlink(missing_ok=True)
     command = [
         codex, "exec",
         "--sandbox", "workspace-write",
@@ -190,7 +194,7 @@ def run_cycle(codex: str, target: Path, logdir: Path, cycle: int, timeout: int) 
                 stdout=handle, stderr=subprocess.STDOUT,
                 cwd=target, timeout=timeout, check=False,
             )
-        message = answer.read_text(encoding="utf-8") if answer.exists() else ""
+        message = answer.read_text(encoding="utf-8") if completed.returncode == 0 and answer.is_file() else ""
         return completed.returncode, parse_status(message), str(logfile)
     except subprocess.TimeoutExpired:
         with logfile.open("a", encoding="utf-8") as handle:

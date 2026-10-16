@@ -14,6 +14,9 @@ Procurar melhorias contínuas autorizadas após cumprir requisitos ou durante ma
 3. Implementar em ambiente isolado otimizações e funcionalidades já contempladas pelo escopo.
 4. Criar teste e baseline antes de alterar; medir resultados e reverter regressões.
 5. Novas finalidades de dados, mudanças de permissão e funcionalidades fora do escopo requerem aprovação.
+6. Adicionar teste de regressão reproduzindo o defeito identificado antes de afirmar que foi corrigido.
+7. Validar o ciclo completo por testes locais ou CI, inclusive saídas ausentes, antigas e erros não-zero do executor.
+8. Registrar separadamente validação com Codex real e validação simulada; nunca confundir as duas.
 
 ## Guardrails inegociáveis
 - Trabalhar apenas em repositório e ambiente expressamente autorizados. Nunca tocar produção, projeto alheio, dados reais ou credenciais sem escopo e autorização específicos.
