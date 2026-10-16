@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from run_agent import parse_status, acceptance_gate, build_prompt, run_cycle, fingerprint, acquire_lock, verify_task
+from run_agent import parse_status, acceptance_gate, build_prompt, run_cycle, fingerprint, acquire_lock, verify_task, write_cycle_evidence
 
 
 class RunnerTests(unittest.TestCase):
@@ -195,6 +195,22 @@ class RunnerTests(unittest.TestCase):
             self.assertNotEqual(
                 run_agent.load_state(state_dir / "runner-state.json")["last_exit_reason"],
                 "READY_FOR_HUMAN_REVIEW")
+
+    def test_cycle_evidence_records_verification_without_log_contents(self):
+        import json
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            record = {"cycle": 7, "date": "2026-10-16T00:00:00Z",
+                      "status": "CONTINUE", "returncode": 0,
+                      "progressed": True, "log": "cycle-00007.log"}
+            task = {"id": "RF-007", "verification_passed": False}
+            evidence = write_cycle_evidence(base, record, task)
+            saved = json.loads(evidence.read_text(encoding="utf-8"))
+            self.assertEqual(saved["task_id"], "RF-007")
+            self.assertEqual(saved["log_file"], "cycle-00007.log")
+            self.assertFalse(saved["tests_verified"])
+            self.assertTrue(saved["review_required"])
+            self.assertFalse(evidence.with_suffix(".tmp").exists())
 
     def test_prompt_has_constraints(self):
         prompt = build_prompt(Path("/tmp/sample"), 3)
