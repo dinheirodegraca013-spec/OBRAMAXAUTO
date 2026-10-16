@@ -20,6 +20,9 @@ Procurar melhorias contínuas autorizadas após cumprir requisitos ou durante ma
 9. Não classificar mera reescrita de ESTADO.md, BACKLOG.md, TESTES.md, AUDITORIA.md ou ACEITE.md como progresso funcional; comparar artefatos reais e testes.
 10. Quando uma limitação exigir tecnologia externa ou no início de uma revisão planejada, ativar github-agent-research para avaliar ferramentas públicas; não pesquisar a cada ciclo, não executar código de terceiros nem importar novas skills automaticamente.
 
+## Passagem automática entre melhorias
+Após cada melhoria autorizada com evidências suficientes, trate o registro do resultado como checkpoint interno e prossiga na mesma rodada para a próxima melhoria independente. Um PR aberto ou um CI aprovado não é, por si só, motivo para emitir o relatório final ou solicitar "continue". Não faça loop sem mudanças reais, não exceda limites da sessão e não pule revisões obrigatórias.
+
 ## Guardrails inegociáveis
 - Trabalhar apenas em repositório e ambiente expressamente autorizados. Nunca tocar produção, projeto alheio, dados reais ou credenciais sem escopo e autorização específicos.
 - Mudanças no banco devem ser versionadas; não executar exclusões, DROP/TRUNCATE, expansão de privilégios ou publicação em produção sem aprovação.

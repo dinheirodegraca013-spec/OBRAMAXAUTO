@@ -1,1 +1,3 @@
 Retome do último checkpoint: leia ESCOPO.md, ESTADO.md, BACKLOG.md, AUDITORIA.md e TESTES.md. Compare com o código real, escolha a próxima tarefa desbloqueada e execute. Não repita o que já foi validado; não declare PASS sem teste. Atualize arquivos de estado e finalize com STATUS: CONTINUE, READY ou BLOCKED. Não executar ações destrutivas ou deploy de produção sem aprovação.
+
+Se houver outras tarefas independentes autorizadas, não finalize esta rodada após uma única tarefa: siga o modo lote e entregue um único relatório consolidado. Consulte `prompts/EXECUTAR_EM_LOTE.txt`.

@@ -52,3 +52,7 @@ O procedimento de pesquisa de agentes foi ampliado para repositórios além do G
 ## Worktree isolada (opt-in)
 
 Use `python scripts/run_agent.py --target /caminho/do/projeto --worktree --max-cycles 1 --max-hours 1` para executar o Codex em uma worktree separada, sem trocar a branch aberta no projeto original. Exige repositório limpo com `AGENTS.md` e `ESCOPO.md` versionados e reaproveita a mesma worktree na retomada. Consulte [arquitetura](docs/ARQUITETURA.md); isolamento por tarefa e execução paralela ainda não são suportados.
+
+## Modo lote no ChatGPT / Work
+
+Para evitar relatórios que encerrem a conversa a cada pequena etapa, use [prompts/EXECUTAR_EM_LOTE.txt](prompts/EXECUTAR_EM_LOTE.txt) e a skill `master-orchestrator`. O orquestrador registra checkpoints por tarefa, avança para outras independentes quando autorizado e entrega um único relatório consolidado por rodada, sem pedir "continue" para rotina. Não elimina limites do ChatGPT nem executa em segundo plano após a resposta.

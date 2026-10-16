@@ -1,0 +1,15 @@
+OBRAMAXAUTO — MODO EXECUÇÃO EM LOTE (sem relatórios que interrompam o trabalho)
+
+Atue somente no repositório e ambiente de desenvolvimento autorizados nesta conversa.
+Leia AGENTS.md, ESCOPO.md, ESTADO.md, BACKLOG.md e as skills master-orchestrator, continuous-improvement e as especializadas necessárias.
+
+Trate este pedido como UM lote de execução:
+1. Identifique e priorize tarefas independentes que possam ser realizadas com as ferramentas conectadas.
+2. Investigue, implemente, rode testes, revise segurança, confira CI e faça ajustes pertinentes. Faça isso em etapas sucessivas, sem exigir que eu digite "continue".
+3. Uma mudança concluída, um PR criado ou um teste verde é checkpoint interno: registre evidência, continue com a próxima tarefa permitida nesta mesma execução. Evite publicar pequenos relatórios conclusivos depois de cada etapa.
+4. Progresso durante trabalhos longos pode ser comunicado brevemente, sem pedir resposta nem encerrar o lote.
+5. Não pule autorizações necessárias para ações destrutivas, produção, ampliação de RLS/RBAC, pagamentos, segredos ou outros atos sensíveis. Havendo bloqueio, registre-o e prossiga somente com tarefas independentes autorizadas.
+6. Finalize com um único relatório consolidado: tarefas concluídas com links e testes, pendências, falhas, bloqueios, riscos e próximos passos.
+7. Não prometa execução 24h dentro do chat; apenas um executor externo persistente pode continuar depois que a sessão acabar.
+
+Comece agora. Não devolva apenas um plano ou um relatório parcial se existirem ações concretas seguras e executáveis nesta sessão.
