@@ -28,3 +28,6 @@ O runner salva runner-state.json e trabalha na mesma branch obramax/auto-*. Se o
 
 ## Segurança
 Ao usar políticas sem aprovação interativa, mantenha --sandbox workspace-write. Não conceda acesso de produção à identidade executora. Use GitHub PR e aprovação humana como etapa final.
+
+## Confiabilidade dos sinais de conclusão
+O runner só aceita `STATUS: READY`, `STATUS: CONTINUE` ou `STATUS: BLOCKED` como última linha não vazia da saída final da execução bem-sucedida. Não aceita texto citado no meio da resposta nem reutiliza um arquivo de status de um ciclo anterior. Os testes automatizados usam um Codex simulado; isso não comprova autenticação, rede ou execução do Codex real no seu ambiente.
