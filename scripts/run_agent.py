@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -257,6 +258,28 @@ def run_cycle(codex: str, target: Path, logdir: Path, cycle: int, timeout: int, 
         return 124, "UNKNOWN", str(logfile)
 
 
+def verify_task(target: Path, command: str | None, timeout: int = 300) -> bool:
+    """Verifica tarefa por comando configurado explicitamente pelo operador.
+
+    Sem shell; sem comando -> sem gate e sem promoção para revisão.
+    """
+    if not command:
+        print("Verificação não configurada: tarefa permanece pendente.")
+        return False
+    argv = shlex.split(command)
+    if not argv or Path(argv[0]).name not in {"python", "python3", "pytest", "npm", "pnpm", "bun"}:
+        raise ValueError("Use comando de teste permitido (python/pytest/npm/pnpm/bun).")
+    if any(a in {"-c", "--eval", "-e"} for a in argv[1:]):
+        raise ValueError("Comando de avaliação inline não permitido.")
+    try:
+        result = subprocess.run(argv, cwd=target, timeout=timeout, check=False)
+        print("Verificação:", argv[0], "exit_code=", result.returncode)
+        return result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print("Verificação não concluída:", error)
+        return False
+
+
 def loop(args: argparse.Namespace) -> int:
     target = verify_target(args.target)
     codex = shutil.which("codex")
@@ -324,7 +347,8 @@ def loop(args: argparse.Namespace) -> int:
             after = fingerprint(target)
             progressed = before != after
             if args.queue:
-                complete(task, status, code, Path(log).name, progressed)
+                verified = verify_task(target, args.verify_command) if status == "READY" and code == 0 and progressed else False
+                complete(task, status, code, Path(log).name, progressed, verified=verified)
                 save_queue(queue_path, q)
             if code:
                 state["consecutive_errors"] = int(state.get("consecutive_errors", 0)) + 1
@@ -386,6 +410,7 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--queue", action="store_true", help="Consumir fila local persistente tasks.json")
     parser.add_argument("--max-task-attempts", type=int, default=3)
+    parser.add_argument("--verify-command", help="Comando de testes configurado pelo operador; obrigatório para concluir tarefa da fila")
     args = parser.parse_args()
     if (args.max_cycles < 1 or args.max_hours <= 0 or args.cycle_timeout < 1
             or args.cooldown < 0 or args.max_errors < 1 or args.max_stagnant < 1 or args.max_task_attempts < 1):

@@ -13,7 +13,7 @@ class TaskQueueTests(unittest.TestCase):
         self.assertEqual(next_task(q)["id"],"A")
         a=q["tasks"][0];claim(a,3)
         self.assertIsNone(next_task(q))
-        complete(a,"READY",0,"cycle.log",True)
+        complete(a,"READY",0,"cycle.log",True,verified=True)
         self.assertEqual(a["status"],"review")
         self.assertIsNone(next_task(q))
         a["status"]="done"
@@ -30,6 +30,15 @@ class TaskQueueTests(unittest.TestCase):
         t=q["tasks"][0];claim(t,3)
         complete(t,"READY",1,"error.log",True)
         self.assertEqual(t["status"],"pending")
+
+    def test_ready_without_verified_evidence_remains_pending(self):
+        q={"version":1,"tasks":[]}
+        add(q,"A","Implementar",[])
+        task=q["tasks"][0]
+        claim(task,3)
+        complete(task,"READY",0,"cycle.log",True)
+        self.assertEqual(task["status"],"pending")
+        self.assertFalse(task["verification_passed"])
 
     def test_save_load_and_bad_deps(self):
         with tempfile.TemporaryDirectory() as d:

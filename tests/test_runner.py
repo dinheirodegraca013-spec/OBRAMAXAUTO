@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from run_agent import parse_status, acceptance_gate, build_prompt, run_cycle, fingerprint, acquire_lock
+from run_agent import parse_status, acceptance_gate, build_prompt, run_cycle, fingerprint, acquire_lock, verify_task
 
 
 class RunnerTests(unittest.TestCase):
@@ -125,6 +125,14 @@ class RunnerTests(unittest.TestCase):
                 self.assertIn("PID=", lockfile.read_text(encoding="utf-8"))
             finally:
                 handle.close()
+
+    def test_gate_requires_operator_command(self):
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertFalse(verify_task(Path(folder), None))
+            with self.assertRaises(ValueError):
+                verify_task(Path(folder), "sh -c true")
+            with self.assertRaises(ValueError):
+                verify_task(Path(folder), "python -c print(1)")
 
     def test_prompt_has_constraints(self):
         prompt = build_prompt(Path("/tmp/sample"), 3)
