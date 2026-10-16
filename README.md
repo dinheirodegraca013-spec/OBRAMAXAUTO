@@ -40,3 +40,7 @@ Documentação: [Instalação](docs/INSTALACAO.md) · [Arquitetura](docs/ARQUITE
 ## Pesquisa de novas tecnologias
 
 A skill `.agents/skills/github-agent-research/SKILL.md` ensina o agente a procurar oportunidades em repositórios públicos (ChatGPT, Codex, Symphony, Ralphex, skills, agentes, QA e segurança), conferir licença e evidências e recomendar POCs sem executar código desconhecido. Veja [a pesquisa e o roadmap](docs/PESQUISA_AGENTES_GITHUB.md). Nenhuma dependência nova é instalada automaticamente.
+
+## Provas de conceito isoladas
+
+Para medir orquestração, detectar ferramentas de navegador e analisar skills externas sem executar código desconhecido, consulte [POC de adoção segura](docs/POC_ADOCAO_SEGURA.md) e os scripts `compare_agent_runs.py`, `browser_preflight.py` e `skill_guard.py`. A presença desses scripts não significa que Ralphex, Symphony ou Playwright foram instalados ou testados em produção.
