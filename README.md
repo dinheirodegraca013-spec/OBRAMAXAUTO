@@ -9,9 +9,9 @@
 1. Instale Python 3.10+, Git e a [Codex CLI](https://developers.openai.com/codex/cli/) e autentique a CLI usando o procedimento oficial.
 2. Clone este repositório: `git clone https://github.com/dinheirodegraca013-spec/OBRAMAXAUTO.git`.
 3. Copie as skills e regras para o seu **repositório de aplicativo**, sem sobrescrever arquivos existentes: `python scripts/install_into_project.py --target /caminho/do/projeto`.
-4. Edite `ESCOPO.md` no projeto-alvo e revise `AGENTS.md` e `OBRAMAXAUTO.md`.
-5. Rode inicialmente um ciclo: `python scripts/run_agent.py --target /caminho/do/projeto --max-cycles 1 --max-hours 1`.
-6. Após verificar o comportamento, amplie gradualmente: `python scripts/run_agent.py --target /caminho/do/projeto --max-cycles 50 --max-hours 9`.
+4. Edite `ESCOPO.md` no projeto-alvo e revise `AGENTS.md` e `OBRAMAXAUTO.md`. **O escopo de exemplo bloqueia a execução propositalmente.**\n5. Execute o diagnóstico **sem alterar arquivos**: `python scripts/doctor.py --target /caminho/do/projeto`.
+6. Rode inicialmente um ciclo: `python scripts/run_agent.py --target /caminho/do/projeto --max-cycles 1 --max-hours 1`.
+7. Após verificar o comportamento, amplie gradualmente: `python scripts/run_agent.py --target /caminho/do/projeto --max-cycles 50 --max-hours 9`.
 
 **O script modifica somente um repositório Git local autorizado, em branch dedicada.** Não faz push, merge ou deploy automaticamente. Para 24/48 horas, use um servidor ou computador ligado e agendador/supervisor, sempre com quotas e monitoramento. Consulte `docs/INSTALACAO.md`.
 

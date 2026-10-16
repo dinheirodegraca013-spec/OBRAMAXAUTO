@@ -23,7 +23,7 @@ O instalador copia as skills e cria arquivos de contexto **somente se não exist
 ## 5. Preencher escopo
 Substitua o texto modelo de `ESCOPO.md` pelo escopo completo, requisitos identificados, critérios verificáveis e limites de autorização. Reveja requisitos de localização, consentimento e RLS.
 
-## 6. Testar um único ciclo
+## 6. Diagnosticar instalação (somente leitura)\n```bash\npython scripts/doctor.py --target ../MEU-SISTEMA\npython scripts/run_agent.py --target ../MEU-SISTEMA --dry-run\n```\nResolva as falhas apontadas antes de executar. O Codex pode estar sem login ou a pasta alvo ser a do próprio kit.\n\n## 8. Testar um único ciclo
 ```bash
 python scripts/run_agent.py --target ../MEU-SISTEMA --max-cycles 1 --max-hours 1
 ```
