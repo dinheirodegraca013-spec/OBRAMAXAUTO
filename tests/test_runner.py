@@ -158,9 +158,9 @@ class RunnerTests(unittest.TestCase):
             def fake_cycle(codex, target, logdir, cycle, timeout, task):
                 (target / "app.py").write_text("print('ok')", encoding="utf-8")
                 return 0, "READY", str(logdir / "cycle-00001.log")
-            with patch.object(run_agent.shutil, "which", return_value="/usr/bin/fake-codex"), \\
-                 patch.object(run_agent, "run_cycle", side_effect=fake_cycle):
-                self.assertEqual(run_agent.loop(args), 1)
+            with patch.object(run_agent.shutil, "which", return_value="/usr/bin/fake-codex"):
+                with patch.object(run_agent, "run_cycle", side_effect=fake_cycle):
+                    self.assertEqual(run_agent.loop(args), 1)
             saved = load_queue(state_dir / "tasks.json")
             self.assertEqual(saved["tasks"][0]["status"], "pending")
             self.assertNotEqual(
