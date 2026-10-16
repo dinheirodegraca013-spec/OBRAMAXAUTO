@@ -423,15 +423,19 @@ def loop(args: argparse.Namespace) -> int:
             task = None
             if args.queue:
                 q = load_queue(queue_path)
-                task = next_task(q)
-                if task is None:
-                    end_reason = "QUEUE_IDLE"
-                    break
-                if not claim(task, args.max_task_attempts):
-                    save_queue(queue_path, q)
-                    end_reason = "TASK_ATTEMPT_LIMIT"
-                    break
+                # Tarefas esgotadas não podem impedir outras independentes.
+                while True:
+                    task = next_task(q)
+                    if task is None or claim(task, args.max_task_attempts):
+                        break
+                    print("Tarefa bloqueada por limite de tentativas; buscando outra:", task["id"])
                 save_queue(queue_path, q)
+                if task is None:
+                    statuses = {item["status"] for item in q["tasks"]}
+                    end_reason = ("TASK_REVIEW" if "review" in statuses
+                                  else "QUEUE_BLOCKED" if "blocked" in statuses
+                                  else "QUEUE_IDLE")
+                    break
             cycle = int(state.get("total_cycles", 0)) + 1
             before = fingerprint(target)
             print(f"Iniciando ciclo {cycle}...")
@@ -454,7 +458,8 @@ def loop(args: argparse.Namespace) -> int:
                 state["consecutive_errors"] = int(state.get("consecutive_errors", 0)) + 1
             else:
                 state["consecutive_errors"] = 0
-            state["stagnant_cycles"] = 0 if progressed else int(state.get("stagnant_cycles", 0)) + 1
+            state["stagnant_cycles"] = (0 if progressed or (args.queue and task["status"] == "blocked")
+                                        else int(state.get("stagnant_cycles", 0)) + 1)
             if status == "READY" and not args.queue:
                 ok, reason = acceptance_gate(target)
                 if not ok:
@@ -472,12 +477,14 @@ def loop(args: argparse.Namespace) -> int:
             write_cycle_evidence(state_dir, record, task)
             print(f"Ciclo {cycle}: status={status}, rc={code}, mudou={progressed}, log={log}")
             if args.queue and task["status"] == "review":
-                end_reason = "TASK_REVIEW"
-                break
+                if next_task(q) is None:
+                    end_reason = "TASK_REVIEW"
+                    break
+                print("Tarefa aguardando revisão humana; executando outra independente.")
             if status == "READY" and code == 0 and not args.queue:
                 end_reason = "READY_FOR_HUMAN_REVIEW"
                 break
-            if status == "BLOCKED" and code == 0:
+            if status == "BLOCKED" and code == 0 and not args.queue:
                 end_reason = "BLOCKED"
                 break
             if state["consecutive_errors"] >= args.max_errors:

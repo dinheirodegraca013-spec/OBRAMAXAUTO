@@ -265,6 +265,74 @@ class RunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "fora do diretório"):
                 prepare_worktree(repo, {"worktree_path": str(repo.parent)}, state_dir)
 
+    def test_queue_continues_unrelated_tasks_while_review_pending(self):
+        import argparse
+        import subprocess
+        from unittest.mock import patch
+        import run_agent
+        from task_queue import add, load as load_queue, save as save_queue
+        with tempfile.TemporaryDirectory() as folder:
+            repo = Path(folder)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            (repo / "AGENTS.md").write_text("# regras", encoding="utf-8")
+            (repo / "ESCOPO.md").write_text("Escopo válido. " * 30, encoding="utf-8")
+            state_dir = repo / ".obramaxauto"
+            state_dir.mkdir()
+            queue = {"version": 1, "tasks": []}
+            add(queue, "A", "Criar API", [])
+            add(queue, "B", "Criar frontend", [])
+            add(queue, "C", "Conectar API ao frontend", ["A"])
+            save_queue(state_dir / "tasks.json", queue)
+            args = argparse.Namespace(target=str(repo), dry_run=False, queue=True,
+                worktree=False, max_cycles=3, max_hours=1, cycle_timeout=10,
+                cooldown=0, max_errors=3, max_stagnant=3, max_task_attempts=3,
+                verify_command="python -m unittest discover -s tests")
+            executed = []
+            def fake_cycle(codex, target, logdir, cycle, timeout, task):
+                executed.append(task["id"])
+                (target / (task["id"] + ".py")).write_text("change", encoding="utf-8")
+                return 0, "READY", str(logdir / "test.log")
+            with patch.object(run_agent.shutil, "which", return_value="codex"):
+                with patch.object(run_agent, "run_cycle", side_effect=fake_cycle):
+                    with patch.object(run_agent, "verify_task", return_value=True):
+                        self.assertEqual(run_agent.loop(args), 0)
+            self.assertEqual(executed, ["A", "B"])
+            states = {task["id"]: task["status"] for task in load_queue(state_dir / "tasks.json")["tasks"]}
+            self.assertEqual(states, {"A": "review", "B": "review", "C": "pending"})
+
+    def test_queue_skips_exhausted_task_and_handles_independent_blocked(self):
+        import argparse
+        import subprocess
+        from unittest.mock import patch
+        import run_agent
+        from task_queue import add, load as load_queue, save as save_queue
+        with tempfile.TemporaryDirectory() as folder:
+            repo = Path(folder)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            (repo / "AGENTS.md").write_text("# regras", encoding="utf-8")
+            (repo / "ESCOPO.md").write_text("Escopo válido. " * 30, encoding="utf-8")
+            state_dir = repo / ".obramaxauto"
+            state_dir.mkdir()
+            queue = {"version": 1, "tasks": []}
+            add(queue, "A", "Esgotada", [])
+            add(queue, "B", "Independente", [])
+            queue["tasks"][0]["attempts"] = 3
+            save_queue(state_dir / "tasks.json", queue)
+            args = argparse.Namespace(target=str(repo), dry_run=False, queue=True,
+                worktree=False, max_cycles=3, max_hours=1, cycle_timeout=10,
+                cooldown=0, max_errors=3, max_stagnant=3, max_task_attempts=3,
+                verify_command=None)
+            executed = []
+            def fake_cycle(codex, target, logdir, cycle, timeout, task):
+                executed.append(task["id"])
+                return 0, "BLOCKED", str(logdir / "test.log")
+            with patch.object(run_agent.shutil, "which", return_value="codex"):
+                with patch.object(run_agent, "run_cycle", side_effect=fake_cycle):
+                    self.assertEqual(run_agent.loop(args), 1)
+            self.assertEqual(executed, ["B"])
+            self.assertEqual([item["status"] for item in load_queue(state_dir / "tasks.json")["tasks"]],
+                             ["blocked", "blocked"])
+
     def test_prompt_has_constraints(self):
         prompt = build_prompt(Path("/tmp/sample"), 3)
         self.assertIn("STATUS: BLOCKED", prompt)
