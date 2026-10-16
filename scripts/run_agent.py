@@ -223,7 +223,10 @@ def build_prompt(target: Path, cycle: int, task: dict | None = None) -> str:
         "STATUS: READY ou STATUS: BLOCKED. "
         "READY só após ACEITE.md todo marcado, evidências de testes e "
         "AUDITORIA.md contendo Parecer final: PASS. "
-        "Nunca fabrique testes ou resultados."\n        + ("\\nTAREFA AUTORIZADA DA FILA: [" + task["id"] + "] " + task["title"]\n           + ". Trabalhe especificamente nela; não mude o estado da fila diretamente. "\n           + "Se faltar condição de autorização, declare BLOCKED." if task else "")\n    )
+        "Nunca fabrique testes ou resultados."
+        + ("\nTAREFA AUTORIZADA DA FILA: [" + task["id"] + "] " + task["title"]
+           + ". Trabalhe especificamente nela; não mude o estado da fila diretamente. "
+           + "Se faltar condição de autorização, declare BLOCKED." if task else "")    )
 
 
 def run_cycle(codex: str, target: Path, logdir: Path, cycle: int, timeout: int, task: dict | None = None) -> tuple[int, str, str]:
