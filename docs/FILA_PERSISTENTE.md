@@ -28,3 +28,6 @@ Ao carregar `tasks.json`, o sistema verifica todas as dependências, inclusive c
 
 ## Proteção contra alterações concorrentes
 As operações `add` e `approve` agora utilizam a mesma trava `runner.lock` do executor. Se o runner estiver ativo, a CLI falha de forma explícita em vez de substituir o JSON da fila durante uma execução. A leitura `list` permanece disponível. Não remova manualmente o arquivo de trava.
+
+## Continuidade de tarefas independentes
+Quando uma tarefa fica em `review` ou `blocked`, o runner agora procura outras tarefas pendentes cujas dependências já estejam concluídas. Tentativas esgotadas são bloqueadas e ignoradas pelo agendador na mesma rodada, sem consumir um ciclo Codex. Dependências de tarefas `review` continuam **bloqueadas até aprovação humana**. O processo encerra com `TASK_REVIEW` quando requer revisão, `QUEUE_BLOCKED` quando nada pode avançar devido a bloqueios ou `QUEUE_IDLE` quando a fila não tem trabalhos executáveis. Os limites globais de ciclos, horas e erros continuam em vigor.
