@@ -56,3 +56,7 @@ Use `python scripts/run_agent.py --target /caminho/do/projeto --worktree --max-c
 ## Modo lote no ChatGPT / Work
 
 Para evitar relatórios que encerrem a conversa a cada pequena etapa, use [prompts/EXECUTAR_EM_LOTE.txt](prompts/EXECUTAR_EM_LOTE.txt) e a skill `master-orchestrator`. O orquestrador registra checkpoints por tarefa, avança para outras independentes quando autorizado e entrega um único relatório consolidado por rodada, sem pedir "continue" para rotina. Não elimina limites do ChatGPT nem executa em segundo plano após a resposta.
+
+## Supervisor persistente opt-in
+
+O script `scripts/supervise_agent.py` relança sessões Codex limitadas em um computador/VPS externo, somente após LIMIT_REACHED com progresso comprovado; nunca ignora bloqueios ou revisão humana. Veja [SUPERVISOR_EXTERNO.md](docs/SUPERVISOR_EXTERNO.md). Não funciona em segundo plano no ChatGPT sem infraestrutura externa.
