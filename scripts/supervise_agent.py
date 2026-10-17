@@ -50,6 +50,12 @@ def supervise(args: argparse.Namespace, invoke=None, sleeper=None) -> int:
         if before.get("inflight"):
             final_reason = "INTERRUPTED_NEEDS_REVIEW"
             break
+        # A previous terminal state must never be silently restarted.
+        # Only LIMIT_REACHED with prior progress is eligible for resumption.
+        prior_reason = before.get("last_exit_reason")
+        if prior_reason and prior_reason != "LIMIT_REACHED":
+            final_reason = "NEEDS_OPERATOR_REVIEW"
+            break
         previous = int(before.get("total_cycles", 0))
         command = [
             sys.executable, str(Path(__file__).with_name("run_agent.py")),
