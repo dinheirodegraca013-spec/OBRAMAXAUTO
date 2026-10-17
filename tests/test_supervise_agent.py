@@ -69,6 +69,19 @@ class SupervisorTests(unittest.TestCase):
                     config(target), invoke=lambda *a, **kw: self.fail("executou"),
                     sleeper=lambda _: None), 1)
 
+    def test_terminal_state_is_not_restarted(self):
+        for reason in ("TASK_REVIEW", "READY_FOR_HUMAN_REVIEW", "BLOCKED", "NO_PROGRESS", "QUEUE_BLOCKED"):
+            with self.subTest(reason=reason), tempfile.TemporaryDirectory() as folder:
+                target = Path(folder)
+                state = target / ".obramaxauto"
+                state.mkdir()
+                (state / "runner-state.json").write_text(
+                    json.dumps(dict(total_cycles=3, last_exit_reason=reason)), encoding="utf-8")
+                with patch.object(supervise_agent, "verify_target", return_value=target):
+                    self.assertEqual(supervise_agent.supervise(
+                        config(target), invoke=lambda *a, **kw: self.fail("executou"),
+                        sleeper=lambda _: None), 1)
+
     def test_stop_file_prevents_any_session(self):
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder)
